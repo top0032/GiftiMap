@@ -1,13 +1,42 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:image_picker/image_picker.dart';
 import '../theme/theme.dart';
+import '../../features/gifticon/presentation/providers/ocr_provider.dart';
 
-class AppScaffold extends StatelessWidget {
+class AppScaffold extends ConsumerWidget {
   final Widget child;
   const AppScaffold({super.key, required this.child});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    // OCR 결과 상태 리스너 (결과 나오면 팝업 띄우기)
+    ref.listen(ocrStateProvider, (previous, next) {
+      if (next is AsyncLoading) {
+        // 옵션: 로딩 인디케이터 표시 (여기서는 생략하거나 간단히 스낵바 띄울 수 있음)
+      } else if (next is AsyncData && next.value != null) {
+        final result = next.value!;
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text('기프티콘 인식 완료'),
+            content: Text('유효기간: ${result.expirationDate ?? '파싱 실패'}\n바코드: ${result.barcodeNumber ?? '파싱 실패'}\n\n원본 글자수: ${result.rawText.length}자'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('확인'),
+              )
+            ],
+          ),
+        );
+      } else if (next is AsyncError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('오류 발생: ${next.error}')),
+        );
+      }
+    });
+
     // 현재 라우트 가져오기
     final String location = GoRouterState.of(context).uri.toString();
     
@@ -20,9 +49,37 @@ class AppScaffold extends StatelessWidget {
       // 둥글고 떠있는 아름다운 FAB (등록 버튼)
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          // TODO: 카메라 촬영 / 바코드 스캔 화면으로 이동
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('기프티콘 등록 기능은 준비중입니다.')),
+          showModalBottomSheet(
+            context: context,
+            shape: const RoundedRectangleBorder(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+            ),
+            builder: (context) => SafeArea(
+              child: Wrap(
+                children: [
+                  const Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Text('기프티콘 추가 방식 선택', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.camera_alt, color: AppTheme.primaryTeal),
+                    title: const Text('카메라로 바로 촬영'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      ref.read(ocrStateProvider.notifier).scanImage(ImageSource.camera);
+                    },
+                  ),
+                  ListTile(
+                    leading: const Icon(Icons.photo_library, color: AppTheme.primaryTeal),
+                    title: const Text('갤러리에서 이미지 불러오기'),
+                    onTap: () {
+                      Navigator.pop(context);
+                      ref.read(ocrStateProvider.notifier).scanImage(ImageSource.gallery);
+                    },
+                  ),
+                ],
+              ),
+            ),
           );
         },
         backgroundColor: AppTheme.primaryTeal,

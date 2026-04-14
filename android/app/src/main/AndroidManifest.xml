@@ -1,4 +1,6 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Required for Firebase, Maps, and any network activity in Release build -->
+    <uses-permission android:name="android.permission.INTERNET"/>
     <application
         android:label="giftimap"
         android:name="${applicationName}"
