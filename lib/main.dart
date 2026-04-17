@@ -60,6 +60,7 @@ class MyApp extends ConsumerWidget {
       title: 'GiftiMap',
       theme: AppTheme.lightTheme,
       routerConfig: router,
+      debugShowCheckedModeBanner: false,
     );
   }
 }
