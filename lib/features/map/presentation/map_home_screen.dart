@@ -1,65 +1,127 @@
 import 'package:flutter/material.dart';
-// import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../../core/theme/theme.dart';
 
-class MapHomeScreen extends StatelessWidget {
+class MapHomeScreen extends StatefulWidget {
   const MapHomeScreen({super.key});
 
   @override
+  State<MapHomeScreen> createState() => _MapHomeScreenState();
+}
+
+class _MapHomeScreenState extends State<MapHomeScreen> {
+  KakaoMapController? _mapController;
+  Position? _currentPosition;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _determinePosition();
+  }
+
+  Future<void> _determinePosition() async {
+    bool serviceEnabled;
+    LocationPermission permission;
+
+    serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        if (mounted) setState(() => _isLoading = false);
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
+
+    try {
+      Position position = await Geolocator.getCurrentPosition();
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return Stack(
+    return Column(
       children: [
-        // 1. 추후 카카오맵이 렌더링될 실제 배경 (임시 Gradient)
-        Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xFFE2E8F0), Color(0xFFF1F5F9)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-          ),
-          child: Center(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.map_rounded, size: 80, color: Colors.grey.withOpacity(0.5)),
-                const SizedBox(height: 16),
-                Text(
-                  '카카오맵 로드 중...',
-                  style: TextStyle(
-                    fontSize: 18,
-                    color: Colors.grey.shade600,
-                    fontWeight: FontWeight.w600,
+        // 상단 2/3: 지도 및 버튼 영역
+        Expanded(
+          flex: 2,
+          child: Stack(
+            children: [
+              // 1. 카카오맵 실제 렌더링
+              Positioned.fill(
+                child: _isLoading
+                    ? Container(
+                        color: AppTheme.backgroundLight,
+                        child: const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
+                      )
+                    : _currentPosition == null
+                        ? Container(
+                            color: AppTheme.backgroundLight,
+                            child: const Center(child: Text('위치를 불러올 수 없습니다.')),
+                          )
+                        : KakaoMap(
+                            onMapCreated: (controller) => _mapController = controller,
+                            center: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                            markers: [
+                              Marker(
+                                markerId: 'my_location',
+                                latLng: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                              ),
+                            ],
+                          ),
+              ),
+
+              // 2. 상단 레이더 / 검색 뱃지 (SafeArea)
+              SafeArea(
+                bottom: false,
+                child: Align(
+                  alignment: Alignment.topCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        _RadarBadge(),
+                        _ProfileButton(),
+                      ],
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-
-        // 2. 상단 레이더 / 검색 뱃지 (SafeArea)
-        SafeArea(
-          child: Align(
-            alignment: Alignment.topCenter,
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _RadarBadge(),
-                  _ProfileButton(),
-                ],
               ),
-            ),
+            ],
           ),
         ),
 
-        // 3. 하단 퀵 모달 (Glassmorphism & Card 스타일)
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: Padding(
-            padding: const EdgeInsets.only(bottom: 120, left: 20, right: 20),
-            child: _NearbyGifticonPanel(),
+        // 하단 1/3: 주변 가맹점 모달 (지도를 가리지 않음)
+        Expanded(
+          flex: 1,
+          child: Container(
+            width: double.infinity,
+            color: AppTheme.backgroundLight, // 패널 뒷배경
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.only(top: 20, left: 20, right: 20, bottom: 40),
+              child: _NearbyGifticonPanel(),
+            ),
           ),
         ),
       ],

@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'core/router/app_router.dart';
 import 'core/theme/theme.dart';
+import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 
 void main() async {
   try {
@@ -12,6 +13,15 @@ void main() async {
     
     // 환경변수 로드
     await dotenv.load(fileName: ".env");
+
+    // 카카오맵 초기화
+    final kakaoMapKey = dotenv.env['KAKAO_MAP_APP_KEY'];
+    if (kakaoMapKey != null && kakaoMapKey.isNotEmpty) {
+      AuthRepository.initialize(
+        appKey: kakaoMapKey, 
+        baseUrl: 'https://localhost',
+      );
+    }
 
     // Firebase 초기화 (중복 초기화 방지)
     try {
