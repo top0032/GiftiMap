@@ -4,6 +4,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
 import '../theme/theme.dart';
 import '../../features/gifticon/presentation/providers/ocr_provider.dart';
+import '../../features/gifticon/domain/models/gifticon_model.dart';
+import '../../features/gifticon/presentation/providers/gifticon_provider.dart';
 
 class AppScaffold extends ConsumerWidget {
   final Widget child;
@@ -25,7 +27,30 @@ class AppScaffold extends ConsumerWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('확인'),
+                child: const Text('취소'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryTeal),
+                onPressed: () {
+                  final newGifticon = GifticonModel(
+                    id: '', // 빈 문자열로 넘기면 Firestore가 자동으로 ID를 생성해줍니다.
+                    brandName: result.brandName ?? '알 수 없는 브랜드',
+                    productName: result.productName ?? '알 수 없는 상품',
+                    expirationDate: result.expirationDate ?? '유효기간 없음',
+                    barcodeNumber: result.barcodeNumber ?? '바코드 인식 실패',
+                    createdAt: DateTime.now(),
+                  );
+                  
+                  // Firestore에 저장
+                  ref.read(gifticonListProvider.notifier).addGifticon(newGifticon);
+                  
+                  Navigator.pop(context); // 팝업 닫기
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('보관함에 성공적으로 저장되었습니다! 🎁')),
+                  );
+                },
+                child: const Text('저장하기', style: TextStyle(color: Colors.white)),
               )
             ],
           ),

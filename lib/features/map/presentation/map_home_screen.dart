@@ -1,24 +1,37 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 import 'package:geolocator/geolocator.dart';
 import '../../../core/theme/theme.dart';
+import '../data/services/kakao_local_api_service.dart';
+import '../data/services/geofence_notification_service.dart';
+import '../domain/models/store_model.dart';
+import '../../gifticon/presentation/providers/gifticon_provider.dart';
 
-class MapHomeScreen extends StatefulWidget {
+class MapHomeScreen extends ConsumerStatefulWidget {
   const MapHomeScreen({super.key});
 
   @override
-  State<MapHomeScreen> createState() => _MapHomeScreenState();
+  ConsumerState<MapHomeScreen> createState() => _MapHomeScreenState();
 }
 
-class _MapHomeScreenState extends State<MapHomeScreen> {
+class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   KakaoMapController? _mapController;
   Position? _currentPosition;
   bool _isLoading = true;
+  bool _isSearchingStores = false;
+  List<StoreModel> _nearbyStores = [];
+  final KakaoLocalApiService _apiService = KakaoLocalApiService();
 
   @override
   void initState() {
     super.initState();
+    _initGeofencing();
     _determinePosition();
+  }
+
+  Future<void> _initGeofencing() async {
+    await GeofenceNotificationService().initialize();
   }
 
   Future<void> _determinePosition() async {
@@ -52,14 +65,99 @@ class _MapHomeScreenState extends State<MapHomeScreen> {
           _currentPosition = position;
           _isLoading = false;
         });
+        // 위치를 가져온 직후 주변 매장 검색
+        _fetchNearbyStores();
       }
     } catch (e) {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _fetchNearbyStores() async {
+    if (_currentPosition == null) return;
+    
+    setState(() => _isSearchingStores = true);
+    
+    // 1. 내 보관함에서 기프티콘 브랜드 목록 가져오기
+    final gifticonState = ref.read(gifticonListProvider);
+    if (!gifticonState.hasValue || gifticonState.value!.isEmpty) {
+      if (mounted) {
+        setState(() {
+          _nearbyStores = [];
+          _isSearchingStores = false;
+        });
+      }
+      return;
+    }
+    
+    final gifticons = gifticonState.value!;
+    // 중복 제거된 브랜드명 추출
+    final brandNames = gifticons
+        .map((g) => g.brandName)
+        .where((brand) => brand != '알 수 없는 브랜드' && brand != null)
+        .toSet()
+        .toList();
+
+    List<StoreModel> allStores = [];
+    
+    // 2. 각 브랜드별로 로컬 API 검색
+    for (String? brand in brandNames) {
+      if (brand == null) continue;
+      final stores = await _apiService.searchNearbyStores(
+        brandName: brand,
+        latitude: _currentPosition!.latitude,
+        longitude: _currentPosition!.longitude,
+        radius: 1000,
+      );
+      allStores.addAll(stores);
+    }
+    
+    // 3. 거리순 정렬
+    allStores.sort((a, b) => a.distance.compareTo(b.distance));
+    
+    // 4. 지오펜싱(배터리 최적화 알림) 설정
+    await GeofenceNotificationService().setupGeofences(allStores);
+    
+    if (mounted) {
+      setState(() {
+        _nearbyStores = allStores;
+        _isSearchingStores = false;
+      });
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Provider의 상태 변화를 구독 (기프티콘 추가/삭제 시 재검색 유도)
+    ref.listen(gifticonListProvider, (previous, next) {
+      if (next.hasValue && _currentPosition != null) {
+        _fetchNearbyStores();
+      }
+    });
+
+    List<Marker> mapMarkers = [];
+    if (_currentPosition != null) {
+      // 내 위치 마커
+      mapMarkers.add(
+        Marker(
+          markerId: 'my_location',
+          latLng: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+          // 추후 커스텀 아이콘으로 변경 가능
+        ),
+      );
+      
+      // 검색된 주변 매장 마커
+      for (var store in _nearbyStores) {
+        mapMarkers.add(
+          Marker(
+            markerId: store.id,
+            latLng: LatLng(store.latitude, store.longitude),
+            infoWindowContent: '<div style="padding:4px;">${store.placeName}</div>',
+          ),
+        );
+      }
+    }
+
     return Column(
       children: [
         // 상단 2/3: 지도 및 버튼 영역
@@ -67,7 +165,6 @@ class _MapHomeScreenState extends State<MapHomeScreen> {
           flex: 2,
           child: Stack(
             children: [
-              // 1. 카카오맵 실제 렌더링
               Positioned.fill(
                 child: _isLoading
                     ? Container(
@@ -82,16 +179,10 @@ class _MapHomeScreenState extends State<MapHomeScreen> {
                         : KakaoMap(
                             onMapCreated: (controller) => _mapController = controller,
                             center: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-                            markers: [
-                              Marker(
-                                markerId: 'my_location',
-                                latLng: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-                              ),
-                            ],
+                            markers: mapMarkers.isEmpty ? null : mapMarkers,
                           ),
               ),
 
-              // 2. 상단 레이더 / 검색 뱃지 (SafeArea)
               SafeArea(
                 bottom: false,
                 child: Align(
@@ -101,26 +192,45 @@ class _MapHomeScreenState extends State<MapHomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        _RadarBadge(),
+                        _RadarBadge(isSearching: _isSearchingStores, storeCount: _nearbyStores.length),
                         _ProfileButton(),
                       ],
                     ),
                   ),
                 ),
               ),
+              
+              // 내 위치로 돌아가기 & 새로고침 버튼
+              Positioned(
+                bottom: 16,
+                right: 16,
+                child: FloatingActionButton(
+                  mini: true,
+                  backgroundColor: AppTheme.surfaceWhite,
+                  child: const Icon(Icons.my_location, color: AppTheme.primaryTeal),
+                  onPressed: () {
+                    if (_currentPosition != null && _mapController != null) {
+                      _mapController!.setCenter(LatLng(_currentPosition!.latitude, _currentPosition!.longitude));
+                      _fetchNearbyStores(); // 검색도 새로고침
+                    } else {
+                      _determinePosition();
+                    }
+                  },
+                ),
+              )
             ],
           ),
         ),
 
-        // 하단 1/3: 주변 가맹점 모달 (지도를 가리지 않음)
+        // 하단 1/3: 주변 가맹점 모달
         Expanded(
           flex: 1,
           child: Container(
             width: double.infinity,
-            color: AppTheme.backgroundLight, // 패널 뒷배경
+            color: AppTheme.backgroundLight,
             child: SingleChildScrollView(
               padding: const EdgeInsets.only(top: 20, left: 20, right: 20, bottom: 40),
-              child: _NearbyGifticonPanel(),
+              child: _NearbyGifticonPanel(stores: _nearbyStores, isSearching: _isSearchingStores, ref: ref),
             ),
           ),
         ),
@@ -130,6 +240,11 @@ class _MapHomeScreenState extends State<MapHomeScreen> {
 }
 
 class _RadarBadge extends StatelessWidget {
+  final bool isSearching;
+  final int storeCount;
+  
+  const _RadarBadge({required this.isSearching, required this.storeCount});
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -148,12 +263,16 @@ class _RadarBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // 깜빡이는 효과를 줘도 좋은 아이콘
-          Icon(Icons.radar_rounded, color: AppTheme.primaryTeal, size: 20),
+          isSearching 
+            ? const SizedBox(
+                width: 16, height: 16, 
+                child: CircularProgressIndicator(strokeWidth: 2, color: AppTheme.primaryTeal)
+              )
+            : const Icon(Icons.radar_rounded, color: AppTheme.primaryTeal, size: 20),
           const SizedBox(width: 8),
-          const Text(
-            '주변 가맹점 탐색 중',
-            style: TextStyle(
+          Text(
+            isSearching ? '주변 가맹점 탐색 중...' : '가맹점 $storeCount곳 발견',
+            style: const TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 14,
               color: AppTheme.secondaryNavy,
@@ -180,13 +299,21 @@ class _ProfileButton extends StatelessWidget {
 }
 
 class _NearbyGifticonPanel extends StatelessWidget {
+  final List<StoreModel> stores;
+  final bool isSearching;
+  final WidgetRef ref;
+
+  const _NearbyGifticonPanel({required this.stores, required this.isSearching, required this.ref});
+
   @override
   Widget build(BuildContext context) {
+    final gifticons = ref.read(gifticonListProvider).value ?? [];
+    
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite.withOpacity(0.95), // 반투명 느낌
+        color: AppTheme.surfaceWhite.withOpacity(0.95),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
@@ -203,30 +330,54 @@ class _NearbyGifticonPanel extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                '총 2개의 사용할 수 있는\n기프티콘이 반경 300m 이내에 있어요!',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w800,
-                  color: AppTheme.secondaryNavy,
-                  height: 1.3,
+              Expanded(
+                child: Text(
+                  isSearching 
+                    ? '내 기프티콘 사용처를\n찾는 중입니다...'
+                    : stores.isEmpty
+                      ? '주변 반경 1km 이내에\n사용 가능한 가맹점이 없습니다.'
+                      : '총 ${stores.length}개의 사용할 수 있는\n기프티콘 매장이 반경 1km 이내에 있어요!',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: AppTheme.secondaryNavy,
+                    height: 1.3,
+                  ),
                 ),
               ),
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryTeal.withOpacity(0.1),
-                  shape: BoxShape.circle,
+              if (!isSearching && stores.isNotEmpty)
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryTeal.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.directions_walk_rounded, color: AppTheme.primaryTeal),
                 ),
-                child: Icon(Icons.directions_walk_rounded, color: AppTheme.primaryTeal),
-              ),
             ],
           ),
           const SizedBox(height: 16),
-          // 가맹점 임시 리스트
-          _StoreListItem(title: '스타벅스 강남역점', distance: '120m', badgeText: '아메리카노 2장'),
-          const SizedBox(height: 8),
-          _StoreListItem(title: 'CU 편의점', distance: '280m', badgeText: '바나나우유 1개'),
+          
+          if (isSearching)
+             const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator(color: AppTheme.primaryTeal))),
+             
+          if (!isSearching && stores.isNotEmpty)
+            ...stores.take(5).map((store) {
+              // 해당 매장 브랜드와 일치하는 내 기프티콘 개수 계산
+              final matchedGifticons = gifticons.where((g) => g.brandName == store.matchedBrand).toList();
+              final badgeText = matchedGifticons.isNotEmpty 
+                  ? '${matchedGifticons.first.productName ?? '쿠폰'} 등 ${matchedGifticons.length}개'
+                  : '사용 가능';
+                  
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 8.0),
+                child: _StoreListItem(
+                  title: store.placeName,
+                  distance: '${store.distance.toInt()}m',
+                  badgeText: badgeText,
+                ),
+              );
+            }),
         ],
       ),
     );
@@ -259,23 +410,30 @@ class _StoreListItem extends StatelessWidget {
                 Text(
                   title,
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 15),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   distance,
-                  style: TextStyle(color: AppTheme.primaryTeal, fontWeight: FontWeight.w600, fontSize: 13),
+                  style: const TextStyle(color: AppTheme.primaryTeal, fontWeight: FontWeight.w600, fontSize: 13),
                 ),
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-            decoration: BoxDecoration(
-              color: AppTheme.primaryTeal,
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Text(
-              badgeText,
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppTheme.primaryTeal,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                badgeText,
+                style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           )
         ],

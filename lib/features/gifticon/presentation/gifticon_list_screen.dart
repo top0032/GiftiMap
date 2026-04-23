@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../core/theme/theme.dart';
+import 'providers/gifticon_provider.dart';
 
-class GifticonListScreen extends StatelessWidget {
+class GifticonListScreen extends ConsumerWidget {
   const GifticonListScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
+    final gifticonsAsyncValue = ref.watch(gifticonListProvider);
+
     return Container(
       color: AppTheme.backgroundLight,
       child: SafeArea(
@@ -51,16 +56,36 @@ class GifticonListScreen extends StatelessWidget {
             ),
             
             Expanded(
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                itemCount: 5,
-                separatorBuilder: (context, index) => const SizedBox(height: 16),
-                itemBuilder: (context, index) {
-                  return _GifticonCard(
-                    brand: '스타벅스',
-                    itemName: '아이스 카페 아메리카노 T',
-                    dDay: index == 0 ? 'D-3' : 'D-${10 + index * 5}',
-                    isUrgent: index == 0,
+              child: gifticonsAsyncValue.when(
+                loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
+                error: (error, stack) => Center(child: Text('데이터를 불러오는 중 오류가 발생했습니다.\n$error', textAlign: TextAlign.center)),
+                data: (gifticons) {
+                  if (gifticons.isEmpty) {
+                    return const Center(child: Text('보관함이 비어있습니다.\n하단의 + 버튼을 눌러 기프티콘을 추가해보세요!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
+                  }
+                  
+                  return ListView.separated(
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                    itemCount: gifticons.length,
+                    separatorBuilder: (context, index) => const SizedBox(height: 16),
+                    itemBuilder: (context, index) {
+                      final gifticon = gifticons[index];
+                      // 단순 임시 D-Day 계산 (향후 날짜 파싱 로직 추가 필요)
+                      final dDay = 'D-?'; 
+                      
+                      return _GifticonCard(
+                        brand: gifticon.brandName,
+                        itemName: gifticon.productName,
+                        dDay: dDay,
+                        isUrgent: false,
+                        onDelete: () {
+                          ref.read(gifticonListProvider.notifier).deleteGifticon(gifticon.id);
+                        },
+                        onTap: () {
+                          context.push('/wallet/detail', extra: gifticon);
+                        },
+                      );
+                    },
                   );
                 },
               ),
@@ -80,12 +105,16 @@ class _GifticonCard extends StatelessWidget {
   final String itemName;
   final String dDay;
   final bool isUrgent;
+  final VoidCallback? onDelete;
+  final VoidCallback? onTap;
 
   const _GifticonCard({
     required this.brand,
     required this.itemName,
     required this.dDay,
     this.isUrgent = false,
+    this.onDelete,
+    this.onTap,
   });
 
   @override
@@ -107,10 +136,30 @@ class _GifticonCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(20),
         clipBehavior: Clip.antiAlias,
         child: InkWell(
-          onTap: () {
-            // TODO: 상세 화면 넘어가기 (생체 인증)
+          onLongPress: () {
+            if (onDelete != null) {
+              showDialog(
+                context: context,
+                builder: (context) => AlertDialog(
+                  title: const Text('삭제하시겠습니까?'),
+                  content: const Text('이 기프티콘을 보관함에서 삭제합니다.'),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
+                    TextButton(
+                      onPressed: () {
+                        Navigator.pop(context);
+                        onDelete!();
+                      },
+                      child: const Text('삭제', style: TextStyle(color: Colors.red)),
+                    ),
+                  ],
+                )
+              );
+            }
+          },
+          onTap: onTap ?? () {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(content: Text('상세 화면은 개발 중입니다.')),
+              const SnackBar(content: Text('상세 화면은 개발 중입니다. (길게 누르면 삭제 가능)')),
             );
           },
           child: Padding(

@@ -5,6 +5,8 @@ import 'package:go_router/go_router.dart';
 import '../widgets/app_scaffold.dart';
 import '../../features/map/presentation/map_home_screen.dart';
 import '../../features/gifticon/presentation/gifticon_list_screen.dart';
+import '../../features/gifticon/presentation/gifticon_detail_screen.dart';
+import '../../features/gifticon/domain/models/gifticon_model.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -28,6 +30,13 @@ final routerProvider = Provider<GoRouter>((ref) {
             ),
           ),
         ],
+      ),
+      GoRoute(
+        path: '/wallet/detail',
+        builder: (context, state) {
+          final gifticon = state.extra as GifticonModel;
+          return GifticonDetailScreen(gifticon: gifticon);
+        },
       ),
     ],
   );

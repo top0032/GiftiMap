@@ -27,6 +27,8 @@ class OcrService {
         rawText: rawText,
         expirationDate: parsedData['expirationDate'],
         barcodeNumber: parsedData['barcodeNumber'],
+        brandName: parsedData['brandName'],
+        productName: parsedData['productName'],
       );
     } catch (e) {
       print('OCR Error: $e');
