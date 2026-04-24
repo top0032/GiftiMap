@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/theme.dart';
 import '../data/services/kakao_local_api_service.dart';
 import '../data/services/geofence_notification_service.dart';
@@ -31,7 +32,20 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   }
 
   Future<void> _initGeofencing() async {
-    await GeofenceNotificationService().initialize();
+    // 백그라운드 위치 권한 상태 확인 (이미 main에서 초기화됨)
+    final status = await Permission.locationAlways.status;
+    if (!status.isGranted && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('알림을 받으려면 위치 권한을 "항상 허용"으로 설정해주세요.'),
+          duration: const Duration(seconds: 5),
+          action: SnackBarAction(
+            label: '설정',
+            onPressed: openAppSettings,
+          ),
+        ),
+      );
+    }
   }
 
   Future<void> _determinePosition() async {
@@ -93,8 +107,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     final gifticons = gifticonState.value!;
     // 중복 제거된 브랜드명 추출
     final brandNames = gifticons
-        .map((g) => g.brandName)
-        .where((brand) => brand != '알 수 없는 브랜드' && brand != null)
+        .map((g) => g.brandName.trim()) // 공백 제거
+        .where((brand) => brand != '알 수 없는 브랜드' && brand.isNotEmpty)
         .toSet()
         .toList();
 
@@ -142,7 +156,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
         Marker(
           markerId: 'my_location',
           latLng: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-          // 추후 커스텀 아이콘으로 변경 가능
+          // 내 위치는 빨간색 마커 이미지로 구분 (카카오 기본 마커와 차별화)
+          markerImageSrc: 'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png',
         ),
       );
       
@@ -158,83 +173,118 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
       }
     }
 
-    return Column(
-      children: [
-        // 상단 2/3: 지도 및 버튼 영역
-        Expanded(
-          flex: 2,
-          child: Stack(
-            children: [
-              Positioned.fill(
-                child: _isLoading
+    return Scaffold(
+      body: Stack(
+        children: [
+          // 1. 전체 지도 배경
+          Positioned.fill(
+            child: _isLoading
+                ? Container(
+                    color: AppTheme.backgroundLight,
+                    child: const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
+                  )
+                : _currentPosition == null
                     ? Container(
                         color: AppTheme.backgroundLight,
-                        child: const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
+                        child: const Center(child: Text('위치를 불러올 수 없습니다.')),
                       )
-                    : _currentPosition == null
-                        ? Container(
-                            color: AppTheme.backgroundLight,
-                            child: const Center(child: Text('위치를 불러올 수 없습니다.')),
-                          )
-                        : KakaoMap(
-                            onMapCreated: (controller) => _mapController = controller,
-                            center: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
-                            markers: mapMarkers.isEmpty ? null : mapMarkers,
-                          ),
-              ),
-
-              SafeArea(
-                bottom: false,
-                child: Align(
-                  alignment: Alignment.topCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        _RadarBadge(isSearching: _isSearchingStores, storeCount: _nearbyStores.length),
-                        _ProfileButton(),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-              
-              // 내 위치로 돌아가기 & 새로고침 버튼
-              Positioned(
-                bottom: 16,
-                right: 16,
-                child: FloatingActionButton(
-                  mini: true,
-                  backgroundColor: AppTheme.surfaceWhite,
-                  child: const Icon(Icons.my_location, color: AppTheme.primaryTeal),
-                  onPressed: () {
-                    if (_currentPosition != null && _mapController != null) {
-                      _mapController!.setCenter(LatLng(_currentPosition!.latitude, _currentPosition!.longitude));
-                      _fetchNearbyStores(); // 검색도 새로고침
-                    } else {
-                      _determinePosition();
-                    }
-                  },
-                ),
-              )
-            ],
+                    : KakaoMap(
+                        onMapCreated: (controller) => _mapController = controller,
+                        center: LatLng(_currentPosition!.latitude, _currentPosition!.longitude),
+                        markers: mapMarkers.isEmpty ? null : mapMarkers,
+                      ),
           ),
-        ),
 
-        // 하단 1/3: 주변 가맹점 모달
-        Expanded(
-          flex: 1,
-          child: Container(
-            width: double.infinity,
-            color: AppTheme.backgroundLight,
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.only(top: 20, left: 20, right: 20, bottom: 40),
-              child: _NearbyGifticonPanel(stores: _nearbyStores, isSearching: _isSearchingStores, ref: ref),
+          // 2. 상단 레이더 배지 및 프로필
+          SafeArea(
+            child: Align(
+              alignment: Alignment.topCenter,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _RadarBadge(isSearching: _isSearchingStores, storeCount: _nearbyStores.length),
+                    _ProfileButton(),
+                  ],
+                ),
+              ),
             ),
           ),
-        ),
-      ],
+          
+          // 3. 내 위치 버튼 (바텀 시트 바로 위에 배치)
+          Positioned(
+            bottom: 100, // 스와이프 패널의 최소 높이보다 살짝 위
+            right: 16,
+            child: FloatingActionButton(
+              mini: true,
+              backgroundColor: AppTheme.surfaceWhite,
+              elevation: 4,
+              child: const Icon(Icons.my_location, color: AppTheme.primaryTeal),
+              onPressed: () {
+                if (_currentPosition != null && _mapController != null) {
+                  _mapController!.setCenter(LatLng(_currentPosition!.latitude, _currentPosition!.longitude));
+                  _fetchNearbyStores();
+                } else {
+                  _determinePosition();
+                }
+              },
+            ),
+          ),
+
+          // 4. 스와이프 가능한 주변 가맹점 패널 (네비게이션 바 위에서 시작)
+          DraggableScrollableSheet(
+            initialChildSize: 0.11, // 최소 높이
+            minChildSize: 0.11,
+            maxChildSize: 0.7, // 좀 더 시원하게 볼 수 있도록 최대 높이 확대
+            snap: true,
+            snapSizes: const [0.11, 0.7],
+            builder: (context, scrollController) {
+              return Container(
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceWhite,
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(32)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 20,
+                      offset: const Offset(0, -5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  children: [
+                    // 드래그 핸들 (가로 막대기)
+                    const SizedBox(height: 12),
+                    Container(
+                      width: 40,
+                      height: 5,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade300,
+                        borderRadius: BorderRadius.circular(2.5),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    
+                    // 실제 내용 영역
+                    Expanded(
+                      child: SingleChildScrollView(
+                        controller: scrollController,
+                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
+                        child: _NearbyGifticonPanel(
+                          stores: _nearbyStores, 
+                          isSearching: _isSearchingStores, 
+                          ref: ref
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ],
+      ),
     );
   }
 }
@@ -309,40 +359,27 @@ class _NearbyGifticonPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final gifticons = ref.read(gifticonListProvider).value ?? [];
     
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite.withOpacity(0.95),
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: AppTheme.secondaryNavy.withOpacity(0.1),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
-          ),
-        ],
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Expanded(
                 child: Text(
                   isSearching 
-                    ? '내 기프티콘 사용처를\n찾는 중입니다...'
+                    ? '내 기프티콘 매장 찾는 중...'
                     : stores.isEmpty
-                      ? '주변 반경 1km 이내에\n사용 가능한 가맹점이 없습니다.'
-                      : '총 ${stores.length}개의 사용할 수 있는\n기프티콘 매장이 반경 1km 이내에 있어요!',
+                      ? '반경 1km 내 사용 가능한 매장이 없습니다.'
+                      : '내 주변 1km 이내 사용 가능한 매장 ${stores.length}곳',
                   style: const TextStyle(
-                    fontSize: 18,
+                    fontSize: 16,
                     fontWeight: FontWeight.w800,
                     color: AppTheme.secondaryNavy,
-                    height: 1.3,
                   ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                 ),
               ),
               if (!isSearching && stores.isNotEmpty)
@@ -379,8 +416,7 @@ class _NearbyGifticonPanel extends StatelessWidget {
               );
             }),
         ],
-      ),
-    );
+      );
   }
 }
 
