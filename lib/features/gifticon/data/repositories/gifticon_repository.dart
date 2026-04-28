@@ -1,8 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import '../../domain/models/gifticon_model.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
-
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../../../core/services/encryption_service.dart';
+
 
 part 'gifticon_repository.g.dart';
 
@@ -15,17 +16,27 @@ class GifticonRepository {
   CollectionReference get _collection => _firestore.collection('gifticons');
 
   Future<void> addGifticon(GifticonModel gifticon) async {
+    final data = gifticon.toFirestore();
+    // 바코드 번호 암호화
+    final encryptedBarcode = EncryptionService().encryptText(gifticon.barcodeNumber);
+    data['barcodeNumber'] = encryptedBarcode;
+
     // ID가 빈 문자열이면 새로 생성, 아니면 해당 ID로 덮어쓰기
     if (gifticon.id.isEmpty) {
-      await _collection.add(gifticon.toFirestore());
+      await _collection.add(data);
     } else {
-      await _collection.doc(gifticon.id).set(gifticon.toFirestore());
+      await _collection.doc(gifticon.id).set(data);
     }
   }
 
   Future<List<GifticonModel>> getGifticons() async {
     final snapshot = await _collection.orderBy('createdAt', descending: true).get();
-    return snapshot.docs.map((doc) => GifticonModel.fromFirestore(doc)).toList();
+    return snapshot.docs.map((doc) {
+      final model = GifticonModel.fromFirestore(doc);
+      // 바코드 번호 복호화
+      final decryptedBarcode = EncryptionService().decryptText(model.barcodeNumber);
+      return model.copyWith(barcodeNumber: decryptedBarcode);
+    }).toList();
   }
 
   Future<void> deleteGifticon(String id) async {

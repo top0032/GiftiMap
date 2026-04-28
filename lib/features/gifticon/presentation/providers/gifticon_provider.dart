@@ -15,36 +15,6 @@ class GifticonList extends _$GifticonList {
     final repo = ref.read(gifticonRepositoryProvider);
     final data = await repo.getGifticons();
     
-    // UI 테스트를 위한 가짜(Dummy) 데이터 추가
-    if (data.isEmpty) {
-      return [
-        GifticonModel(
-          id: 'dummy1',
-          brandName: '스타벅스',
-          productName: '아이스 카페 아메리카노 T',
-          expirationDate: '2026.05.20',
-          barcodeNumber: '123456789012',
-          createdAt: DateTime.now(),
-        ),
-        GifticonModel(
-          id: 'dummy2',
-          brandName: '투썸플레이스',
-          productName: '스트로베리 초콜릿 생크림',
-          expirationDate: '2026.06.15',
-          barcodeNumber: '987654321098',
-          createdAt: DateTime.now().subtract(const Duration(days: 1)),
-        ),
-        GifticonModel(
-          id: 'dummy3',
-          brandName: '배스킨라빈스',
-          productName: '파인트 아이스크림',
-          expirationDate: '2026.07.01',
-          barcodeNumber: '567812349012',
-          createdAt: DateTime.now().subtract(const Duration(days: 2)),
-        ),
-      ];
-    }
-    
     return data;
   }
 
