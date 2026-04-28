@@ -33,7 +33,7 @@ final class GifticonListProvider
   GifticonList create() => GifticonList();
 }
 
-String _$gifticonListHash() => r'dc14708d4d4925f7e0526ff1efa762a511fa5ce4';
+String _$gifticonListHash() => r'45915693d0102630613cb84aa304190ecc294127';
 
 abstract class _$GifticonList extends $AsyncNotifier<List<GifticonModel>> {
   FutureOr<List<GifticonModel>> build();
