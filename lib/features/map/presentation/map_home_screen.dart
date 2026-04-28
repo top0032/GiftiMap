@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:permission_handler/permission_handler.dart';
@@ -8,6 +9,7 @@ import '../data/services/kakao_local_api_service.dart';
 import '../data/services/geofence_notification_service.dart';
 import '../domain/models/store_model.dart';
 import '../../gifticon/presentation/providers/gifticon_provider.dart';
+import '../../auth/presentation/providers/auth_provider.dart';
 
 class MapHomeScreen extends ConsumerStatefulWidget {
   const MapHomeScreen({super.key});
@@ -373,15 +375,87 @@ class _RadarBadge extends StatelessWidget {
   }
 }
 
-class _ProfileButton extends StatelessWidget {
+class _ProfileButton extends ConsumerWidget {
   @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      backgroundColor: AppTheme.surfaceWhite,
-      radius: 22,
-      child: IconButton(
-        icon: const Icon(Icons.person_rounded, color: AppTheme.secondaryNavy),
-        onPressed: () {},
+  Widget build(BuildContext context, WidgetRef ref) {
+    final user = FirebaseAuth.instance.currentUser;
+
+    return GestureDetector(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 16),
+                // 프로필 이미지
+                CircleAvatar(
+                  radius: 40,
+                  backgroundColor: AppTheme.primaryTeal.withOpacity(0.1),
+                  backgroundImage: user?.photoURL != null 
+                      ? NetworkImage(user!.photoURL!) 
+                      : null,
+                  child: user?.photoURL == null
+                      ? const Icon(Icons.person, size: 40, color: AppTheme.primaryTeal)
+                      : null,
+                ),
+                const SizedBox(height: 16),
+                // 사용자 이름
+                Text(
+                  user?.displayName ?? '사용자',
+                  style: const TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.secondaryNavy,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                // 사용자 이메일
+                Text(
+                  user?.email ?? '이메일 정보 없음',
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                const Divider(),
+                // 로그아웃 버튼
+                ListTile(
+                  leading: const Icon(Icons.logout, color: Colors.redAccent),
+                  title: const Text(
+                    '로그아웃',
+                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    ref.read(authControllerProvider.notifier).signOut();
+                  },
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('닫기', style: TextStyle(color: AppTheme.secondaryNavy)),
+              ),
+            ],
+          ),
+        );
+      },
+      child: CircleAvatar(
+        backgroundColor: AppTheme.surfaceWhite,
+        radius: 22,
+        backgroundImage: user?.photoURL != null 
+            ? NetworkImage(user!.photoURL!) 
+            : null,
+        child: user?.photoURL == null
+            ? const Icon(Icons.person_rounded, color: AppTheme.secondaryNavy)
+            : null,
       ),
     );
   }
