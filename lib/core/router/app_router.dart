@@ -12,25 +12,30 @@ import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
-  // 인증 상태를 감시합니다.
+  // 인증 상태와 닉네임 상태를 모두 감시합니다.
   final authState = ref.watch(authStateProvider);
+  final displayName = ref.watch(displayNameProvider);
 
   return GoRouter(
     initialLocation: '/',
     redirect: (context, state) {
-      // 로딩 중이거나 에러 발생 시 리다이렉트를 수행하지 않습니다.
       if (authState.isLoading || authState.hasError) return null;
 
-      final isLoggedIn = authState.value != null;
+      final user = authState.value;
+      final isLoggedIn = user != null;
+      
+      // 익명 로그인인 경우, Firebase 유저 객체 혹은 앱 내부 프로바이더 중 
+      // 어디에든 이름이 존재하면 준비된 것으로 간주합니다.
+      final isProfileReady = !isLoggedIn || 
+                            (user.displayName != null || displayName != null || !user.isAnonymous);
+      
       final isLoggingIn = state.matchedLocation == '/login';
 
-      // 로그인이 되어있지 않은데 로그인 페이지가 아니라면 로그인 페이지로 이동합니다.
-      if (!isLoggedIn && !isLoggingIn) {
+      if ((!isLoggedIn || !isProfileReady) && !isLoggingIn) {
         return '/login';
       }
 
-      // 로그인이 되어있는데 로그인 페이지에 머물러 있다면 메인 페이지로 이동합니다.
-      if (isLoggedIn && isLoggingIn) {
+      if (isLoggedIn && isProfileReady && isLoggingIn) {
         return '/';
       }
 

@@ -52,7 +52,65 @@ final class AuthRepositoryProvider
   }
 }
 
-String _$authRepositoryHash() => r'e3b22fd7863ea1be0b322870da43112c60f80087';
+String _$authRepositoryHash() => r'19a3485653561ac2f781b997131430c5659286d1';
+
+/// 사용자의 닉네임을 별도로 관리하는 프로바이더입니다.
+
+@ProviderFor(DisplayName)
+final displayNameProvider = DisplayNameProvider._();
+
+/// 사용자의 닉네임을 별도로 관리하는 프로바이더입니다.
+final class DisplayNameProvider
+    extends $NotifierProvider<DisplayName, String?> {
+  /// 사용자의 닉네임을 별도로 관리하는 프로바이더입니다.
+  DisplayNameProvider._()
+    : super(
+        from: null,
+        argument: null,
+        retry: null,
+        name: r'displayNameProvider',
+        isAutoDispose: true,
+        dependencies: null,
+        $allTransitiveDependencies: null,
+      );
+
+  @override
+  String debugGetCreateSourceHash() => _$displayNameHash();
+
+  @$internal
+  @override
+  DisplayName create() => DisplayName();
+
+  /// {@macro riverpod.override_with_value}
+  Override overrideWithValue(String? value) {
+    return $ProviderOverride(
+      origin: this,
+      providerOverride: $SyncValueProvider<String?>(value),
+    );
+  }
+}
+
+String _$displayNameHash() => r'c1d3b14ed0adc3dc4a6da263687283f2912aa1d9';
+
+/// 사용자의 닉네임을 별도로 관리하는 프로바이더입니다.
+
+abstract class _$DisplayName extends $Notifier<String?> {
+  String? build();
+  @$mustCallSuper
+  @override
+  void runBuild() {
+    final ref = this.ref as $Ref<String?, String?>;
+    final element =
+        ref.element
+            as $ClassProviderElement<
+              AnyNotifier<String?, String?>,
+              String?,
+              Object?,
+              Object?
+            >;
+    element.handleCreate(ref, build);
+  }
+}
 
 /// Firebase의 인증 상태(User?) 변화를 실시간으로 감지하여 제공하는 스트림 프로바이더입니다.
 
@@ -90,7 +148,7 @@ final class AuthStateProvider
   }
 }
 
-String _$authStateHash() => r'd9cb25a6beabac8407f73e3a8258280c56cedcd4';
+String _$authStateHash() => r'91d3309f20a95c681d08b7bebec0851a77682fd0';
 
 /// 로그인 및 로그아웃과 같은 인증 동작을 제어하는 컨트롤러(Controller) 클래스입니다.
 
@@ -120,7 +178,7 @@ final class AuthControllerProvider
   AuthController create() => AuthController();
 }
 
-String _$authControllerHash() => r'aa1d0cbd9fea43696aec6a8aeab7c5b679fa3bae';
+String _$authControllerHash() => r'd2e4a474c9ab6cb6b8343007116efd843113a36c';
 
 /// 로그인 및 로그아웃과 같은 인증 동작을 제어하는 컨트롤러(Controller) 클래스입니다.
 

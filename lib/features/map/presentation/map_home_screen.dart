@@ -29,8 +29,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   @override
   void initState() {
     super.initState();
-    _initGeofencing();
     _determinePosition();
+    _initGeofencing();
   }
 
   Future<void> _initGeofencing() async {
@@ -378,7 +378,8 @@ class _RadarBadge extends StatelessWidget {
 class _ProfileButton extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final user = FirebaseAuth.instance.currentUser;
+    // authStateProvider를 감시하여 사용자 정보가 바뀌면 화면을 다시 그립니다.
+    final user = ref.watch(authStateProvider).value;
 
     return GestureDetector(
       onTap: () {
@@ -404,25 +405,31 @@ class _ProfileButton extends ConsumerWidget {
                       : null,
                 ),
                 const SizedBox(height: 16),
-                // 사용자 이름
-                Text(
-                  user?.displayName ?? '사용자',
-                  style: const TextStyle(
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                    color: AppTheme.secondaryNavy,
-                  ),
+                // 사용자 이름 (Consumer를 사용하여 팝업 내부에서도 실시간 업데이트)
+                Consumer(
+                  builder: (context, ref, child) {
+                    final currentName = ref.watch(displayNameProvider) ?? user?.displayName ?? '사용자';
+                    print('[UI_CHECK] Inside Dialog Name: $currentName');
+                    return Text(
+                      currentName,
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.secondaryNavy,
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 4),
                 // 사용자 이메일
                 Text(
-                  user?.email ?? '이메일 정보 없음',
+                  user?.email ?? (user?.isAnonymous == true ? '익명 계정 (카카오 연동됨)' : '이메일 정보 없음'),
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey.shade600,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 16),
                 const Divider(),
                 // 로그아웃 버튼
                 ListTile(
@@ -431,9 +438,9 @@ class _ProfileButton extends ConsumerWidget {
                     '로그아웃',
                     style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
                   ),
-                  onTap: () {
+                  onTap: () async {
                     Navigator.pop(context);
-                    ref.read(authControllerProvider.notifier).signOut();
+                    await ref.read(authControllerProvider.notifier).signOut();
                   },
                 ),
               ],
