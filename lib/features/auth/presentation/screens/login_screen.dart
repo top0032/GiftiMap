@@ -80,51 +80,89 @@ class LoginScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 80),
 
-                  // 로그인 버튼 또는 로딩 인디케이터
-                  authState.isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        )
-                      : ElevatedButton(
-                          onPressed: () {
-                            ref.read(authControllerProvider.notifier).signInWithGoogle();
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black87,
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32,
-                              vertical: 16,
-                            ),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            elevation: 8,
-                            shadowColor: Colors.black26,
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              // 구글 G 로고 이미지 (네트워크에서 로드)
-                              Image.network(
-                                'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.png',
-                                height: 24,
-                                errorBuilder: (context, error, stackTrace) => const Icon(
-                                  Icons.login,
-                                  color: Colors.black54,
-                                ),
-                              ),
-                              const SizedBox(width: 16),
-                              const Text(
-                                'Google로 로그인',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
+                  // 로그인 버튼 섹션
+                  if (authState.isLoading)
+                    const CircularProgressIndicator(
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    )
+                  else ...[
+                    // Google 로그인 버튼
+                    ElevatedButton(
+                      onPressed: () {
+                        ref.read(authControllerProvider.notifier).signInWithGoogle();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: Colors.black87,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
                         ),
+                        minimumSize: const Size(double.infinity, 56), // 버튼 너비 확장
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 8,
+                        shadowColor: Colors.black26,
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Image.network(
+                            'https://upload.wikimedia.org/wikipedia/commons/5/53/Google_%22G%22_Logo.png',
+                            height: 24,
+                            errorBuilder: (context, error, stackTrace) => const Icon(
+                              Icons.login,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          const Text(
+                            'Google로 로그인',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    // Kakao 로그인 버튼
+                    ElevatedButton(
+                      onPressed: () {
+                        ref.read(authControllerProvider.notifier).signInWithKakao();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFEE500), // 카카오 시그니처 옐로우
+                        foregroundColor: const Color(0xFF191919),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 32,
+                          vertical: 16,
+                        ),
+                        minimumSize: const Size(double.infinity, 56), // 버튼 너비 확장
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        elevation: 8,
+                        shadowColor: Colors.black26,
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.chat_bubble_rounded, size: 24),
+                          const SizedBox(width: 16),
+                          Text(
+                            '카카오로 로그인',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),

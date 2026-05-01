@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -7,20 +8,32 @@ import 'core/router/app_router.dart';
 import 'core/theme/theme.dart';
 import 'features/map/data/services/geofence_notification_service.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
+import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
 
 void main() async {
+  print('--- App Starting... ---');
   try {
     WidgetsFlutterBinding.ensureInitialized();
     
     // 환경변수 로드
     await dotenv.load(fileName: ".env");
+    print('.env loaded: ${dotenv.env.keys.take(3).toList()}');
 
-    // 카카오맵 초기화
-    final kakaoMapKey = dotenv.env['KAKAO_MAP_APP_KEY'];
-    if (kakaoMapKey != null && kakaoMapKey.isNotEmpty) {
+    // 카카오 SDK 초기화 (로그인용: 네이티브 앱 키)
+    final nativeKey = dotenv.env['KAKAO_NATIVE_APP_KEY'];
+    // 카카오맵 초기화 (지도용: 자바스크립트 앱 키)
+    final jsKey = dotenv.env['KAKAO_JS_APP_KEY'];
+
+    if (nativeKey != null && nativeKey.isNotEmpty) {
+      // 카카오 로그인 SDK 초기화 (네이티브 키 필수)
+      kakao.KakaoSdk.init(nativeAppKey: nativeKey);
+    }
+
+    if (jsKey != null && jsKey.isNotEmpty) {
+      // 카카오맵 초기화 (자바스크립트 키 권장)
       AuthRepository.initialize(
-        appKey: kakaoMapKey, 
-        baseUrl: 'https://localhost',
+        appKey: jsKey, 
+        baseUrl: 'http://localhost',
       );
     }
     
