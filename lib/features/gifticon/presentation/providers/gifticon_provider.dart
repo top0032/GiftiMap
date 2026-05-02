@@ -67,7 +67,7 @@ class GifticonList extends _$GifticonList {
     }
   }
 
-  Future<void> markAsUsed(String id) async {
+  Future<void> updateGifticonStatus(String id, bool isUsed) async {
     if (id.isEmpty) return;
     final previousState = state;
     
@@ -75,7 +75,7 @@ class GifticonList extends _$GifticonList {
     if (state.hasValue) {
       state = AsyncData(state.value!.map((g) {
         if (g.id == id) {
-          return g.copyWith(isUsed: true);
+          return g.copyWith(isUsed: isUsed);
         }
         return g;
       }).toList());
@@ -87,7 +87,7 @@ class GifticonList extends _$GifticonList {
       }
       
       final repo = ref.read(gifticonRepositoryProvider);
-      await repo.updateGifticonStatus(id, true).timeout(const Duration(seconds: 3));
+      await repo.updateGifticonStatus(id, isUsed).timeout(const Duration(seconds: 3));
       
       state = AsyncData(await _fetchGifticons());
     } catch (e, st) {

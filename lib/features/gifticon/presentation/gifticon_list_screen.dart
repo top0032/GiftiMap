@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import 'dart:io';
 import '../../../core/theme/theme.dart';
 import 'providers/gifticon_provider.dart';
+import '../domain/models/gifticon_model.dart';
 
 class GifticonListScreen extends ConsumerWidget {
   const GifticonListScreen({super.key});
@@ -13,129 +14,175 @@ class GifticonListScreen extends ConsumerWidget {
     final gifticonsAsyncValue = ref.watch(gifticonListProvider);
     final gifticonCount = gifticonsAsyncValue.value?.length ?? 0;
 
-    return Scaffold(
-      backgroundColor: AppTheme.backgroundLight,
-      body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        text: '보관함에 ',
-                        style: const TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.w400,
-                          color: AppTheme.secondaryNavy,
-                          height: 1.3,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: '$gifticonCount개의\n',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primaryTeal,
-                            ),
+    return DefaultTabController(
+      length: 2,
+      child: Scaffold(
+        backgroundColor: AppTheme.backgroundLight,
+        body: SafeArea(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: RichText(
+                        text: TextSpan(
+                          text: '보관함에 ',
+                          style: const TextStyle(
+                            fontSize: 28,
+                            fontWeight: FontWeight.w400,
+                            color: AppTheme.secondaryNavy,
+                            height: 1.3,
                           ),
-                          const TextSpan(text: '기프티콘이 있어요'),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  CircleAvatar(
-                    backgroundColor: AppTheme.surfaceWhite,
-                    radius: 24,
-                    child: IconButton(
-                      icon: const Icon(Icons.notifications_none_rounded, color: AppTheme.secondaryNavy),
-                      onPressed: () {},
-                    ),
-                  )
-                ],
-              ),
-            ),
-            
-            Expanded(
-              child: gifticonsAsyncValue.when(
-                loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
-                error: (error, stack) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(
-                          '데이터를 불러오는 중 오류가 발생했습니다.\n$error',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
+                          children: [
+                            TextSpan(
+                              text: '$gifticonCount개의\n',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w800,
+                                color: AppTheme.primaryTeal,
+                              ),
+                            ),
+                            const TextSpan(text: '기프티콘이 있어요'),
+                          ],
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => ref.invalidate(gifticonListProvider),
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('새로고침'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryTeal,
-                          foregroundColor: Colors.white,
-                        ),
+                    ),
+                    const SizedBox(width: 16),
+                    CircleAvatar(
+                      backgroundColor: AppTheme.surfaceWhite,
+                      radius: 24,
+                      child: IconButton(
+                        icon: const Icon(Icons.notifications_none_rounded, color: AppTheme.secondaryNavy),
+                        onPressed: () {},
                       ),
-                    ],
-                  ),
+                    )
+                  ],
                 ),
-                data: (gifticons) {
-                  if (gifticons.isEmpty) {
-                    return const Center(child: Text('보관함이 비어있습니다.\n하단의 + 버튼을 눌러 기프티콘을 추가해보세요!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
-                  }
-                  
-                  return ListView.separated(
-                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                    itemCount: gifticons.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 16),
-                    itemBuilder: (context, index) {
-                      final gifticon = gifticons[index];
-                      // 기한이 7일 이하로 남았거나 이미 만료된 경우(음수) 빨간색 긴급 배지로 표시
-                      final remainingDays = gifticon.remainingDays;
-                      final isExpired = (gifticon.isUsed == true) || (remainingDays < 0 && remainingDays != -999);
-                      final isUrgent = (gifticon.isUsed != true) && (remainingDays >= 0 && remainingDays <= 14);
-                      
-                      return _GifticonCard(
-                        imageUrl: gifticon.imageUrl,
-                        brand: gifticon.brandName,
-                        itemName: gifticon.productName,
-                        dDay: gifticon.dDayString,
-                        isUrgent: isUrgent,
-                        isExpired: isExpired,
-                        onTap: () {
-                          context.push('/wallet/detail', extra: gifticon);
-                        },
-                      );
-                    },
-                  );
-                },
               ),
-            ),
-            
-            // 바텀 네비게이션 여백
-            const SizedBox(height: 100),
-          ],
+              
+              // 탭 바 추가
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: TabBar(
+                  dividerColor: Colors.transparent,
+                  indicatorColor: AppTheme.primaryTeal,
+                  indicatorWeight: 3,
+                  labelColor: AppTheme.primaryTeal,
+                  unselectedLabelColor: Colors.grey,
+                  labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  unselectedLabelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                  tabs: const [
+                    Tab(text: '사용 가능'),
+                    Tab(text: '사용 완료'),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              
+              Expanded(
+                child: gifticonsAsyncValue.when(
+                  loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
+                  error: (error, stack) => Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 24),
+                          child: Text(
+                            '데이터를 불러오는 중 오류가 발생했습니다.\n$error',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(color: Colors.red),
+                          ),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton.icon(
+                          onPressed: () => ref.invalidate(gifticonListProvider),
+                          icon: const Icon(Icons.refresh_rounded),
+                          label: const Text('새로고침'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryTeal,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  data: (gifticons) {
+                    if (gifticons.isEmpty) {
+                      return const Center(child: Text('보관함이 비어있습니다.\n하단의 + 버튼을 눌러 기프티콘을 추가해보세요!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
+                    }
+                    
+                    // 사용 가능 필터링
+                    final availableGifticons = gifticons.where((g) => g.isUsed != true).toList();
+                    // 사용 완료 필터링
+                    final usedGifticons = gifticons.where((g) => g.isUsed == true).toList();
+
+                    return TabBarView(
+                      children: [
+                        // 사용 가능 탭
+                        _buildGifticonList(availableGifticons, context),
+                        // 사용 완료 탭
+                        _buildGifticonList(usedGifticons, context, isArchive: true),
+                      ],
+                    );
+                  },
+                ),
+              ),
+              
+              // 바텀 네비게이션 여백
+              const SizedBox(height: 100),
+            ],
+          ),
         ),
+        floatingActionButton: FloatingActionButton.extended(
+          onPressed: () {
+            context.push('/wallet/add-manual');
+          },
+          backgroundColor: AppTheme.primaryTeal,
+          elevation: 4,
+          icon: const Icon(Icons.add_rounded, color: Colors.white),
+          label: const Text('기프티콘 등록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          context.push('/wallet/add-manual');
-        },
-        backgroundColor: AppTheme.primaryTeal,
-        elevation: 4,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('기프티콘 등록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildGifticonList(List<GifticonModel> gifticons, BuildContext context, {bool isArchive = false}) {
+    if (gifticons.isEmpty) {
+      return Center(
+        child: Text(
+          isArchive ? '사용 완료된 기프티콘이 없습니다.' : '사용 가능한 기프티콘이 없습니다.',
+          style: const TextStyle(color: Colors.grey),
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      itemCount: gifticons.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 16),
+      itemBuilder: (context, index) {
+        final gifticon = gifticons[index];
+        final remainingDays = gifticon.remainingDays;
+        final isExpired = (gifticon.isUsed == true) || (remainingDays < 0 && remainingDays != -999);
+        final isUrgent = (gifticon.isUsed != true) && (remainingDays >= 0 && remainingDays <= 14);
+        
+        return _GifticonCard(
+          imageUrl: gifticon.imageUrl,
+          brand: gifticon.brandName,
+          itemName: gifticon.productName,
+          dDay: gifticon.dDayString,
+          isUrgent: isUrgent,
+          isExpired: isExpired,
+          onTap: () {
+            context.push('/wallet/detail', extra: gifticon);
+          },
+        );
+      },
     );
   }
 }
