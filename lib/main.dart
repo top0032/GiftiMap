@@ -9,6 +9,9 @@ import 'core/theme/theme.dart';
 import 'features/map/data/services/geofence_notification_service.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 import 'package:kakao_flutter_sdk_user/kakao_flutter_sdk_user.dart' as kakao;
+import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
+import 'features/gifticon/data/services/expiration_notification_service.dart';
 
 void main() async {
   print('--- App Starting... ---');
@@ -37,8 +40,11 @@ void main() async {
       );
     }
     
-    // 지오펜싱 서비스 초기화 (앱 시작 시 배경에서 작동하도록)
+    // 알림 서비스 초기화 (지오펜싱 및 유효기간 임박 알림)
+    tz.initializeTimeZones(); // 시간대 데이터 로드
+    tz.setLocalLocation(tz.getLocation('Asia/Seoul')); // 현지 시간대 설정
     await GeofenceNotificationService().initialize();
+    await ExpirationNotificationService().initialize();
 
     // Firebase 초기화 (중복 초기화 방지)
     try {
