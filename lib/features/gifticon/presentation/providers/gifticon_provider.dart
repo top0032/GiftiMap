@@ -1,6 +1,7 @@
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/models/gifticon_model.dart';
 import '../../data/repositories/gifticon_repository.dart';
+import '../../data/services/expiration_notification_service.dart';
 
 part 'gifticon_provider.g.dart';
 
@@ -31,6 +32,10 @@ class GifticonList extends _$GifticonList {
     try {
       final repo = ref.read(gifticonRepositoryProvider);
       await repo.addGifticon(gifticon);
+      
+      // 유효기간 알림 예약
+      await ExpirationNotificationService().scheduleExpirationNotifications(gifticon);
+      
       // 성공 시 실제 DB 데이터와 최종 동기화
       state = AsyncData(await _fetchGifticons());
     } catch (e, st) {
@@ -50,6 +55,9 @@ class GifticonList extends _$GifticonList {
     }
 
     try {
+      // 알림 취소
+      await ExpirationNotificationService().cancelExpirationNotifications(id);
+
       // 프론트엔드 테스트를 위해 생성한 더미 데이터의 경우, DB 삭제 및 재조회를 건너뜁니다.
       if (id.startsWith('dummy')) {
         return;
@@ -82,6 +90,17 @@ class GifticonList extends _$GifticonList {
     }
 
     try {
+      if (isUsed) {
+        // 사용 완료 시 알림 취소
+        await ExpirationNotificationService().cancelExpirationNotifications(id);
+      } else {
+        // 다시 미사용으로 돌릴 시 알림 재예약
+        if (state.hasValue) {
+          final gifticon = state.value!.firstWhere((g) => g.id == id);
+          await ExpirationNotificationService().scheduleExpirationNotifications(gifticon);
+        }
+      }
+
       if (id.startsWith('dummy')) {
         return;
       }
