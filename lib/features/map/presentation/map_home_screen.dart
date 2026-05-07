@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:kakao_map_plugin/kakao_map_plugin.dart';
 import 'package:geolocator/geolocator.dart';
@@ -24,6 +25,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   Position? _currentPosition;
   bool _isLoading = true;
   bool _isSearchingStores = false;
+  bool _showStores = false;
+  String? _selectedStoreId;
   List<StoreModel> _nearbyStores = [];
   final KakaoLocalApiService _apiService = KakaoLocalApiService();
 
@@ -148,6 +151,11 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   ScrollController? _innerScrollController;
 
   Future<void> _moveToStore(StoreModel store) async {
+    if (mounted) {
+      setState(() {
+        _selectedStoreId = store.id;
+      });
+    }
     if (_mapController != null) {
       // 1. 내부 리스트 스크롤을 맨 위로 초기화
       _innerScrollController?.jumpTo(0);
@@ -192,8 +200,20 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
       // 검색된 주변 매장 마커
       final gifticons = ref.read(gifticonListProvider).value ?? [];
       final Set<String> existingIds = {'my_location'};
+      
       for (var store in _nearbyStores) {
         if (existingIds.contains(store.id)) continue;
+        
+        // 특정 매장이 선택된 경우, 그 매장이 아니면 무시
+        if (_selectedStoreId != null && store.id != _selectedStoreId) {
+          continue;
+        }
+        
+        // 특정 매장이 선택되지 않았고, 발견(showStores) 상태도 아니면 무시
+        if (_selectedStoreId == null && !_showStores) {
+          continue;
+        }
+
         existingIds.add(store.id);
 
         final safePlaceName = store.placeName
@@ -208,6 +228,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
             ? '$safePlaceName ($matchedCount개)'
             : safePlaceName;
 
+        // 선택된 매장일 경우 파란색(기본), 아니면 별모양? 사용자가 '딱 그 매장만' 나오게 해달라고 했으므로 
+        // 굳이 별 모양이 필요 없고 그냥 마커만 보여주면 됨.
         mapMarkers.add(
           Marker(
             markerId: store.id,
@@ -272,6 +294,13 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
                     _RadarBadge(
                       isSearching: _isSearchingStores,
                       storeCount: _nearbyStores.length,
+                      isExpanded: _showStores,
+                      onToggle: () {
+                        setState(() {
+                          _showStores = !_showStores;
+                          _selectedStoreId = null; // 레이더 배지 토글 시 선택 초기화
+                        });
+                      },
                     ),
                     _ProfileButton(),
                   ],
@@ -291,6 +320,9 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
               child: const Icon(Icons.my_location, color: AppTheme.primaryTeal),
               onPressed: () {
                 if (_currentPosition != null && _mapController != null) {
+                  setState(() {
+                    _selectedStoreId = null; // 내 위치로 돌아갈 때 선택 초기화
+                  });
                   _mapController!.setCenter(
                     LatLng(
                       _currentPosition!.latitude,
@@ -367,51 +399,65 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
 class _RadarBadge extends StatelessWidget {
   final bool isSearching;
   final int storeCount;
+  final bool isExpanded;
+  final VoidCallback onToggle;
 
-  const _RadarBadge({required this.isSearching, required this.storeCount});
+  const _RadarBadge({
+    required this.isSearching,
+    required this.storeCount,
+    required this.isExpanded,
+    required this.onToggle,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: AppTheme.surfaceWhite.withOpacity(0.9),
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          isSearching
-              ? const SizedBox(
-                  width: 16,
-                  height: 16,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    color: AppTheme.primaryTeal,
-                  ),
-                )
-              : const Icon(
-                  Icons.radar_rounded,
-                  color: AppTheme.primaryTeal,
-                  size: 20,
-                ),
-          const SizedBox(width: 8),
-          Text(
-            isSearching ? '주변 가맹점 탐색 중...' : '가맹점 $storeCount곳 발견',
-            style: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 14,
-              color: AppTheme.secondaryNavy,
+    return GestureDetector(
+      onTap: onToggle,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: EdgeInsets.symmetric(horizontal: isExpanded ? 16 : 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceWhite.withOpacity(0.9),
+          borderRadius: BorderRadius.circular(20),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
             ),
-          ),
-        ],
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            isSearching
+                ? const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: AppTheme.primaryTeal,
+                    ),
+                  )
+                : const Icon(
+                    Icons.radar_rounded,
+                    color: AppTheme.primaryTeal,
+                    size: 20,
+                  ),
+            if (isExpanded) ...[
+              const SizedBox(width: 8),
+              Text(
+                isSearching ? '주변 가맹점 탐색 중...' : '가맹점 $storeCount곳 발견',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: AppTheme.secondaryNavy,
+                ),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
@@ -601,7 +647,41 @@ class _NearbyGifticonPanel extends StatelessWidget {
                 title: store.placeName,
                 distance: '${store.distance.toInt()}m',
                 badgeText: badgeText,
-                onTap: () => onStoreTap?.call(store),
+                onLocationTap: () => onStoreTap?.call(store),
+                onGifticonTap: () {
+                  if (matchedGifticons.isNotEmpty) {
+                    if (matchedGifticons.length == 1) {
+                      context.push('/wallet/detail', extra: matchedGifticons.first);
+                    } else {
+                      showModalBottomSheet(
+                        context: context,
+                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                        builder: (context) => SafeArea(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Padding(
+                                padding: const EdgeInsets.all(16.0),
+                                child: Text('${store.placeName} 기프티콘 선택', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                              ),
+                              ...matchedGifticons.map((g) => ListTile(
+                                leading: const Icon(Icons.card_giftcard_rounded, color: AppTheme.primaryTeal),
+                                title: Text(g.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                subtitle: Text('유효기간: ${g.expirationDate}'),
+                                trailing: const Icon(Icons.chevron_right_rounded),
+                                onTap: () {
+                                  Navigator.pop(context);
+                                  context.push('/wallet/detail', extra: g);
+                                },
+                              )),
+                              const SizedBox(height: 16),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+                  }
+                },
               ),
             );
           }),
@@ -614,75 +694,112 @@ class _StoreListItem extends StatelessWidget {
   final String title;
   final String distance;
   final String badgeText;
-  final VoidCallback? onTap;
+  final VoidCallback? onLocationTap;
+  final VoidCallback? onGifticonTap;
 
   const _StoreListItem({
     required this.title,
     required this.distance,
     required this.badgeText,
-    this.onTap,
+    this.onLocationTap,
+    this.onGifticonTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.backgroundLight,
-          borderRadius: BorderRadius.circular(16),
-        ),
-        child: Row(
-          children: [
-            const Icon(Icons.storefront_rounded, color: Colors.grey),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15,
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: AppTheme.backgroundLight,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          const Icon(Icons.storefront_rounded, color: Colors.grey, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    distance,
-                    style: const TextStyle(
-                      color: AppTheme.primaryTeal,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: onLocationTap,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: Colors.grey.shade300),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('위치보기', style: TextStyle(fontSize: 12, color: AppTheme.secondaryNavy, fontWeight: FontWeight.bold)),
+                      ),
                     ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            Flexible(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppTheme.primaryTeal,
-                  borderRadius: BorderRadius.circular(10),
+                    const SizedBox(width: 6),
+                    InkWell(
+                      onTap: onGifticonTap,
+                      borderRadius: BorderRadius.circular(6),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.primaryTeal,
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: const Text('기프티콘 보기', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
                 ),
-                child: Text(
-                  badgeText,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Text(
+                      distance,
+                      style: const TextStyle(
+                        color: AppTheme.primaryTeal,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 12,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          badgeText,
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
