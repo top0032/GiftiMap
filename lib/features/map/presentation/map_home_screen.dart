@@ -25,7 +25,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   Position? _currentPosition;
   bool _isLoading = true;
   bool _isSearchingStores = false;
-  bool _showStores = false;
+  bool _showStores = true;
   String? _selectedStoreId;
   List<StoreModel> _nearbyStores = [];
   final KakaoLocalApiService _apiService = KakaoLocalApiService();
@@ -556,7 +556,7 @@ class _ProfileButton extends ConsumerWidget {
   }
 }
 
-class _NearbyGifticonPanel extends StatelessWidget {
+class _NearbyGifticonPanel extends StatefulWidget {
   final List<StoreModel> stores;
   final bool isSearching;
   final WidgetRef ref;
@@ -572,12 +572,35 @@ class _NearbyGifticonPanel extends StatelessWidget {
   });
 
   @override
+  State<_NearbyGifticonPanel> createState() => _NearbyGifticonPanelState();
+}
+
+class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
+  String? _selectedFilterBrand;
+
+  @override
   Widget build(BuildContext context) {
     // ref.watch를 사용하여 기프티콘 리스트 변화를 실시간으로 감시
-    final gifticons = ref.watch(gifticonListProvider).value ?? [];
+    final gifticons = widget.ref.watch(gifticonListProvider).value ?? [];
+
+    // 필터링할 브랜드 추출 (현재 찾은 매장들과 일치하는 내 기프티콘 브랜드들)
+    final Set<String> availableBrands = {};
+    if (!widget.isSearching && widget.stores.isNotEmpty) {
+      for (var store in widget.stores) {
+        final matched = gifticons.where((g) => g.brandName == store.matchedBrand && g.isUsed != true);
+        if (matched.isNotEmpty) {
+          availableBrands.add(store.matchedBrand);
+        }
+      }
+    }
+
+    // 선택된 브랜드에 따라 매장 필터링
+    final displayedStores = _selectedFilterBrand == null 
+        ? widget.stores 
+        : widget.stores.where((s) => s.matchedBrand == _selectedFilterBrand).toList();
 
     return ListView(
-      controller: scrollController,
+      controller: widget.scrollController,
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
       // 시트가 최소 높이일 때도 드래그가 끊기지 않도록 설정
       physics: const ClampingScrollPhysics(),
@@ -587,11 +610,11 @@ class _NearbyGifticonPanel extends StatelessWidget {
           children: [
             Expanded(
               child: Text(
-                isSearching
+                widget.isSearching
                     ? '내 기프티콘 매장 찾는 중...'
-                    : stores.isEmpty
+                    : widget.stores.isEmpty
                     ? '반경 1km 내 사용 가능한 매장이 없습니다.'
-                    : '내 주변 1km 이내 사용 가능한 매장 ${stores.length}곳',
+                    : '내 주변 1km 이내 사용 가능한 매장 ${widget.stores.length}곳',
                 style: const TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -601,7 +624,7 @@ class _NearbyGifticonPanel extends StatelessWidget {
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-            if (!isSearching && stores.isNotEmpty)
+            if (!widget.isSearching && widget.stores.isNotEmpty)
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
@@ -615,9 +638,63 @@ class _NearbyGifticonPanel extends StatelessWidget {
               ),
           ],
         ),
+
+        // 브랜드 필터 버튼 리스트
+        if (!widget.isSearching && availableBrands.isNotEmpty) ...[
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 36,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                // '전체' 버튼
+                Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: const Text('전체', style: TextStyle(fontWeight: FontWeight.bold)),
+                    selected: _selectedFilterBrand == null,
+                    onSelected: (selected) {
+                      if (selected) {
+                        setState(() => _selectedFilterBrand = null);
+                      }
+                    },
+                    selectedColor: AppTheme.primaryTeal,
+                    labelStyle: TextStyle(
+                      color: _selectedFilterBrand == null ? Colors.white : AppTheme.secondaryNavy,
+                    ),
+                    backgroundColor: Colors.grey.shade100,
+                    showCheckmark: false,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
+                  ),
+                ),
+                // 각 브랜드별 버튼
+                ...availableBrands.map((brand) => Padding(
+                  padding: const EdgeInsets.only(right: 8.0),
+                  child: ChoiceChip(
+                    label: Text(brand, style: const TextStyle(fontWeight: FontWeight.bold)),
+                    selected: _selectedFilterBrand == brand,
+                    onSelected: (selected) {
+                      setState(() {
+                        _selectedFilterBrand = selected ? brand : null;
+                      });
+                    },
+                    selectedColor: AppTheme.primaryTeal,
+                    labelStyle: TextStyle(
+                      color: _selectedFilterBrand == brand ? Colors.white : AppTheme.secondaryNavy,
+                    ),
+                    backgroundColor: Colors.grey.shade100,
+                    showCheckmark: false,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
+                  ),
+                )),
+              ],
+            ),
+          ),
+        ],
+
         const SizedBox(height: 16),
 
-        if (isSearching)
+        if (widget.isSearching)
           const Center(
             child: Padding(
               padding: EdgeInsets.all(20),
@@ -625,8 +702,8 @@ class _NearbyGifticonPanel extends StatelessWidget {
             ),
           ),
 
-        if (!isSearching && stores.isNotEmpty)
-          ...stores.map((store) {
+        if (!widget.isSearching && displayedStores.isNotEmpty)
+          ...displayedStores.map((store) {
             // 해당 매장 브랜드와 일치하는 내 '사용 가능한' 기프티콘 목록 필터링
             final matchedGifticons = gifticons
                 .where((g) => g.brandName == store.matchedBrand && g.isUsed != true)
@@ -647,7 +724,7 @@ class _NearbyGifticonPanel extends StatelessWidget {
                 title: store.placeName,
                 distance: '${store.distance.toInt()}m',
                 badgeText: badgeText,
-                onLocationTap: () => onStoreTap?.call(store),
+                onLocationTap: () => widget.onStoreTap?.call(store),
                 onGifticonTap: () {
                   if (matchedGifticons.isNotEmpty) {
                     if (matchedGifticons.length == 1) {
