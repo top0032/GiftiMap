@@ -59,7 +59,7 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
                       text: TextSpan(
                         text: '보관함에 ',
                         style: const TextStyle(
-                          fontSize: 28,
+                          fontSize: 22,
                           fontWeight: FontWeight.w400,
                           color: AppTheme.secondaryNavy,
                           height: 1.3,

@@ -78,6 +78,38 @@ class GifticonList extends _$GifticonList {
     }
   }
 
+  Future<void> updateGifticon(GifticonModel updatedGifticon) async {
+    if (updatedGifticon.id.isEmpty) return;
+    final previousState = state;
+    
+    // 낙관적 업데이트
+    if (state.hasValue) {
+      state = AsyncData(state.value!.map((g) {
+        if (g.id == updatedGifticon.id) {
+          return updatedGifticon;
+        }
+        return g;
+      }).toList());
+    }
+
+    try {
+      final repo = ref.read(gifticonRepositoryProvider);
+      // addGifticon 내부에서 id가 있으면 업데이트로 처리함
+      await repo.addGifticon(updatedGifticon);
+      
+      // 기존 알림 취소 후 변경된 기프티콘 정보로 알림 재등록
+      await ExpirationNotificationService().cancelExpirationNotifications(updatedGifticon.id);
+      if (updatedGifticon.isUsed != true) {
+        await ExpirationNotificationService().scheduleExpirationNotifications(updatedGifticon);
+      }
+      
+      state = AsyncData(await _fetchGifticons());
+    } catch (e, st) {
+      state = previousState;
+      state = AsyncError(e, st);
+    }
+  }
+
   Future<void> updateGifticonStatus(String id, bool isUsed) async {
     if (id.isEmpty) return;
     final previousState = state;

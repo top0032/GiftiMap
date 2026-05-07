@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
 import 'package:barcode_widget/barcode_widget.dart';
 import 'package:screen_brightness/screen_brightness.dart';
+import 'package:go_router/go_router.dart';
 import '../domain/models/gifticon_model.dart';
 import '../../../core/theme/theme.dart';
 import 'providers/gifticon_provider.dart';
@@ -47,6 +48,13 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final gifticonsAsyncValue = ref.watch(gifticonListProvider);
+    final gifticons = gifticonsAsyncValue.value ?? [];
+    final currentGifticon = gifticons.firstWhere(
+      (g) => g.id == widget.gifticon.id,
+      orElse: () => widget.gifticon,
+    );
+
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
@@ -57,6 +65,15 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          TextButton(
+            onPressed: () {
+              context.push('/wallet/edit', extra: currentGifticon);
+            },
+            child: const Text(
+              '수정',
+              style: TextStyle(color: AppTheme.primaryTeal, fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
           TextButton(
             onPressed: () {
               showDialog(
@@ -71,7 +88,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     ),
                     TextButton(
                       onPressed: () {
-                        ref.read(gifticonListProvider.notifier).deleteGifticon(widget.gifticon.id);
+                        ref.read(gifticonListProvider.notifier).deleteGifticon(currentGifticon.id);
                         Navigator.pop(context); // 다이얼로그 닫기
                         Navigator.pop(context); // 상세 화면 닫기
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -100,7 +117,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
             children: [
               const SizedBox(height: 10),
               // 실제 등록한 기프티콘 이미지가 있을 경우 화면 중앙 상단에 렌더링
-              if (widget.gifticon.imageUrl != null && widget.gifticon.imageUrl!.isNotEmpty)
+              if (currentGifticon.imageUrl != null && currentGifticon.imageUrl!.isNotEmpty)
                 Container(
                   width: MediaQuery.of(context).size.width * 0.6,
                   height: MediaQuery.of(context).size.width * 0.6,
@@ -118,7 +135,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Image.file(
-                    File(widget.gifticon.imageUrl!),
+                    File(currentGifticon.imageUrl!),
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
                   ),
@@ -128,23 +145,23 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                 margin: const EdgeInsets.only(bottom: 12),
                 padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
                 decoration: BoxDecoration(
-                  color: widget.gifticon.isUsed == true 
+                  color: currentGifticon.isUsed == true 
                       ? Colors.grey.shade200 
                       : AppTheme.primaryTeal.withOpacity(0.1),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  widget.gifticon.isUsed == true ? '사용 완료' : '사용 가능',
+                  currentGifticon.isUsed == true ? '사용 완료' : '사용 가능',
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.bold,
-                    color: widget.gifticon.isUsed == true ? Colors.grey.shade600 : AppTheme.primaryTeal,
+                    color: currentGifticon.isUsed == true ? Colors.grey.shade600 : AppTheme.primaryTeal,
                   ),
                 ),
               ),
               // 브랜드 및 상품명
               Text(
-                widget.gifticon.brandName,
+                currentGifticon.brandName,
                 style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w700,
@@ -153,7 +170,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
               ),
               const SizedBox(height: 12),
               Text(
-                widget.gifticon.productName,
+                currentGifticon.productName,
                 textAlign: TextAlign.center,
                 style: const TextStyle(
                   fontSize: 26,
@@ -174,7 +191,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                       border: Border.all(color: Colors.grey.shade300),
                     ),
                     child: Text(
-                      '유효기간: ${widget.gifticon.expirationDate}',
+                      '유효기간: ${currentGifticon.expirationDate}',
                       style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w600,
@@ -185,9 +202,9 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                   const SizedBox(width: 12),
                   Builder(
                     builder: (context) {
-                      final days = widget.gifticon.remainingDays;
-                      final isExpired = (widget.gifticon.isUsed == true) || (days < 0 && days != -999);
-                      final isUrgent = (widget.gifticon.isUsed != true) && (days >= 0 && days <= 14);
+                      final days = currentGifticon.remainingDays;
+                      final isExpired = (currentGifticon.isUsed == true) || (days < 0 && days != -999);
+                      final isUrgent = (currentGifticon.isUsed != true) && (days >= 0 && days <= 14);
                       
                       return Container(
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -198,7 +215,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          widget.gifticon.dDayString,
+                          currentGifticon.dDayString,
                           style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w800,
@@ -231,7 +248,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                   children: [
                     BarcodeWidget(
                       barcode: Barcode.code128(), // 주로 쓰이는 범용 바코드 포맷
-                      data: widget.gifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''), // 렌더링 오류 방지를 위해 숫자/영문자만 추출
+                      data: currentGifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''), // 렌더링 오류 방지를 위해 숫자/영문자만 추출
                       width: double.infinity,
                       height: 100,
                       errorBuilder: (context, error) => const Center(
@@ -248,7 +265,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
               ),
               const Spacer(),
               // 결제 완료/사용 완료 처리 버튼
-              if (widget.gifticon.isUsed != true)
+              if (currentGifticon.isUsed != true)
                 SizedBox(
                   width: double.infinity,
                   child: ElevatedButton(
@@ -272,11 +289,34 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                ref.read(gifticonListProvider.notifier).updateGifticonStatus(widget.gifticon.id, true);
+                                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                final screenHeight = MediaQuery.of(context).size.height;
+                                final safeAreaTop = MediaQuery.of(context).padding.top;
+
+                                ref.read(gifticonListProvider.notifier).updateGifticonStatus(currentGifticon.id, true);
                                 Navigator.pop(context); // 다이얼로그 닫기
                                 Navigator.pop(context); // 상세 화면 닫기
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('기프티콘이 사용 처리되었습니다.')),
+                                
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(
+                                    content: const Text(
+                                      '기프티콘이 사용 처리되었습니다',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    margin: EdgeInsets.only(
+                                      bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
+                                      left: 50,
+                                      right: 50,
+                                    ),
+                                    backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
+                                    elevation: 0,
+                                    duration: const Duration(seconds: 2),
+                                  ),
                                 );
                               },
                               child: const Text('사용 완료', style: TextStyle(color: AppTheme.primaryTeal, fontWeight: FontWeight.bold)),
@@ -311,7 +351,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                         context: context,
                         builder: (context) => AlertDialog(
                           title: const Text('상태 변경'),
-                          content: const Text('이 기프티콘을 다시 \'미사용\' 상태로 변경하시겠습니까?'),
+                          content: const Text('이 기프티콘을 다시 미사용 상태로 변경하시겠습니까?'),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(context),
@@ -319,11 +359,34 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                             ),
                             TextButton(
                               onPressed: () {
-                                ref.read(gifticonListProvider.notifier).updateGifticonStatus(widget.gifticon.id, false);
+                                final scaffoldMessenger = ScaffoldMessenger.of(context);
+                                final screenHeight = MediaQuery.of(context).size.height;
+                                final safeAreaTop = MediaQuery.of(context).padding.top;
+
+                                ref.read(gifticonListProvider.notifier).updateGifticonStatus(currentGifticon.id, false);
                                 Navigator.pop(context); // 다이얼로그 닫기
                                 Navigator.pop(context); // 상세 화면 닫기
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(content: Text('기프티콘이 미사용 상태로 복구되었습니다.')),
+                                
+                                scaffoldMessenger.showSnackBar(
+                                  SnackBar(
+                                    content: const Text(
+                                      '기프티콘이 미사용 상태로 복구되었습니다',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                                    ),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
+                                    margin: EdgeInsets.only(
+                                      bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
+                                      left: 50,
+                                      right: 50,
+                                    ),
+                                    backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
+                                    elevation: 0,
+                                    duration: const Duration(seconds: 2),
+                                  ),
                                 );
                               },
                               child: const Text('복구하기', style: TextStyle(color: AppTheme.primaryTeal, fontWeight: FontWeight.bold)),

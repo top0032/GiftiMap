@@ -19,6 +19,15 @@ void main() async {
   try {
     WidgetsFlutterBinding.ensureInitialized();
     
+    // 상단 상태바(시간, 배터리 등)가 하얀 배경에서 잘 보이도록 아이콘을 어둡게 설정
+    SystemChrome.setSystemUIOverlayStyle(
+      const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent, // 투명 상태바
+        statusBarIconBrightness: Brightness.dark, // 안드로이드 어두운 아이콘
+        statusBarBrightness: Brightness.light, // iOS 어두운 아이콘
+      ),
+    );
+
     // 환경변수 로드
     await dotenv.load(fileName: ".env");
     print('.env loaded: ${dotenv.env.keys.take(3).toList()}');

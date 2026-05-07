@@ -7,6 +7,7 @@ import '../../features/map/presentation/map_home_screen.dart';
 import '../../features/gifticon/presentation/gifticon_list_screen.dart';
 import '../../features/gifticon/presentation/gifticon_detail_screen.dart';
 import '../../features/gifticon/presentation/gifticon_manual_add_screen.dart';
+import '../../features/gifticon/presentation/gifticon_edit_screen.dart';
 import '../../features/gifticon/domain/models/gifticon_model.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
@@ -82,6 +83,13 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/wallet/add-manual',
         builder: (context, state) => const GifticonManualAddScreen(),
+      ),
+      GoRoute(
+        path: '/wallet/edit',
+        builder: (context, state) {
+          final gifticon = state.extra as GifticonModel;
+          return GifticonEditScreen(gifticon: gifticon);
+        },
       ),
     ],
   );
