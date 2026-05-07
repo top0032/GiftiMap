@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/timezone.dart' as tz;
 import '../../domain/models/gifticon_model.dart';
+import '../../../settings/data/repositories/settings_repository.dart';
 
 class ExpirationNotificationService {
   static final ExpirationNotificationService _instance = ExpirationNotificationService._internal();
@@ -10,6 +11,7 @@ class ExpirationNotificationService {
   ExpirationNotificationService._internal();
 
   final FlutterLocalNotificationsPlugin _localNotificationsPlugin = FlutterLocalNotificationsPlugin();
+  final SettingsRepository _settingsRepository = SettingsRepository();
 
   Future<void> initialize() async {
     if (!kIsWeb && Platform.isWindows) return;
@@ -29,90 +31,94 @@ class ExpirationNotificationService {
         // 알림 클릭 시 처리 로직
       },
     );
+
+    // 권한 요청 추가
+    await _requestPermissions();
   }
 
-  /// 기프티콘 만료 알림 예약 (7일전, 3일전, 1일전)
+  Future<void> _requestPermissions() async {
+    if (Platform.isAndroid) {
+      final AndroidFlutterLocalNotificationsPlugin? androidImplementation =
+          _localNotificationsPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+
+      // 알림 권한 요청 (Android 13+)
+      await androidImplementation?.requestNotificationsPermission();
+      // 정확한 알람 권한 요청 (Android 12+)
+      await androidImplementation?.requestExactAlarmsPermission();
+    } else if (Platform.isIOS) {
+      await _localNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              IOSFlutterLocalNotificationsPlugin>()
+          ?.requestPermissions(
+            alert: true,
+            badge: true,
+            sound: true,
+          );
+    }
+  }
+
+  /// 기프티콘 만료 알림 예약 (사용자 설정에 따름)
   Future<void> scheduleExpirationNotifications(GifticonModel gifticon) async {
     if (!kIsWeb && Platform.isWindows) return;
     if (gifticon.isUsed == true) return;
 
-    // [테스트용] 등록 5초 후 즉시 알림 테스트 (정상 작동 확인용)
-    await _scheduleTestNotification(gifticon);
+    final settings = await _settingsRepository.getNotificationSettings();
+    if (!settings.isEnabled) return;
 
-    final expirationDate = _parseExpirationDate(gifticon.expirationDate);
-    if (expirationDate == null) {
-      debugPrint('날짜 파싱 실패: ${gifticon.expirationDate}');
-      return;
-    }
+    final expirationDate = gifticon.parsedExpirationDate;
+    if (expirationDate == null) return;
 
-    final notificationDays = [7, 3, 1];
-    
-    for (int daysBefore in notificationDays) {
+    for (final alert in settings.alerts) {
+      final daysBefore = alert.daysBefore;
       final scheduledDate = expirationDate.subtract(Duration(days: daysBefore));
       final finalScheduledDate = DateTime(
         scheduledDate.year,
         scheduledDate.month,
         scheduledDate.day,
-        9, 0, 0,
+        alert.hour,
+        alert.minute,
+        0,
       );
 
       if (finalScheduledDate.isBefore(DateTime.now())) continue;
 
       final notificationId = _generateNotificationId(gifticon.id, daysBefore);
 
+      final body = daysBefore == 0 
+          ? '${gifticon.brandName} - ${gifticon.productName} 유효기간이 오늘 만료됩니다! ⏰'
+          : '${gifticon.brandName} - ${gifticon.productName} 유효기간이 $daysBefore일 남았습니다.';
+
       await _localNotificationsPlugin.zonedSchedule(
         id: notificationId,
-        title: '기프티콘 만료 임박! 🎁',
-        body: '${gifticon.brandName} - ${gifticon.productName} 유효기간이 $daysBefore일 남았습니다.',
+        title: daysBefore == 0 ? '기프티콘 오늘 만료! 🚨' : '기프티콘 만료 임박! 🎁',
+        body: body,
         scheduledDate: tz.TZDateTime.from(finalScheduledDate, tz.local),
         notificationDetails: const NotificationDetails(
           android: AndroidNotificationDetails(
             'expiration_channel',
-            'Expiration Notifications',
+            '유효기간 만료 알림',
+            channelDescription: '기프티콘 유효기간 만료 전 알림을 보냅니다.',
             importance: Importance.max,
             priority: Priority.high,
           ),
           iOS: DarwinNotificationDetails(),
         ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+        androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       );
     }
   }
 
-  Future<void> _scheduleTestNotification(GifticonModel gifticon) async {
-    try {
-      await _localNotificationsPlugin.zonedSchedule(
-        id: (gifticon.id.hashCode).abs() % 0x7FFFFFFF,
-        title: '테스트 알림: 기프티콘 등록 완료! ✅',
-        body: '${gifticon.brandName} 기프티콘이 등록되었습니다. (5초 후 알림)',
-        scheduledDate: tz.TZDateTime.now(tz.local).add(const Duration(seconds: 5)),
-        notificationDetails: const NotificationDetails(
-          android: AndroidNotificationDetails(
-            'test_channel',
-            'Test Notifications',
-            importance: Importance.max,
-            priority: Priority.high,
-          ),
-          iOS: DarwinNotificationDetails(),
-        ),
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-      );
-    } catch (e) {
-      debugPrint('테스트 알림 예약 실패: $e');
-    }
-  }
-
-  /// 특정 기프티콘의 모든 알림 취소
+  /// 기프티콘 만료 알림 취소
   Future<void> cancelExpirationNotifications(String gifticonId) async {
     if (!kIsWeb && Platform.isWindows) return;
     
-    final notificationDays = [7, 3, 1];
-    for (int daysBefore in notificationDays) {
-      final notificationId = _generateNotificationId(gifticonId, daysBefore);
+    final settings = await _settingsRepository.getNotificationSettings();
+    // 설정된 모든 알림 시점에 대해 취소 시도
+    for (final alert in settings.alerts) {
+      final notificationId = _generateNotificationId(gifticonId, alert.daysBefore);
       await _localNotificationsPlugin.cancel(id: notificationId);
     }
-    // 테스트 알림도 취소
-    await _localNotificationsPlugin.cancel(id: (gifticonId.hashCode).abs() % 0x7FFFFFFF);
   }
 
   DateTime? _parseExpirationDate(String dateStr) {
@@ -138,3 +144,4 @@ class ExpirationNotificationService {
     return (gifticonId.hashCode ^ daysBefore.hashCode).abs() % 0x7FFFFFFF;
   }
 }
+

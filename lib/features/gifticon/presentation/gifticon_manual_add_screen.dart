@@ -53,6 +53,7 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
     if (_formKey.currentState!.validate()) {
       final newGifticon = GifticonModel(
         id: DateTime.now().millisecondsSinceEpoch.toString(), // 로컬에서 임시 고유 ID 생성
+        userId: '', // 저장소에서 실제 로그인한 사용자의 UID로 덮어씌워집니다.
         brandName: _brandController.text,
         productName: _productController.text,
         expirationDate: _expirationController.text,
@@ -70,6 +71,24 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
     }
   }
 
+  Future<void> _selectDate(BuildContext context) async {
+    final DateTime? picked = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+      helpText: '유효기간 선택',
+      cancelText: '취소',
+      confirmText: '확인',
+    );
+    if (picked != null) {
+      setState(() {
+        _expirationController.text =
+            "${picked.year}.${picked.month.toString().padLeft(2, '0')}.${picked.day.toString().padLeft(2, '0')}";
+      });
+    }
+  }
+
   Widget _buildTextField({
     required String label,
     required String hint,
@@ -77,6 +96,8 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
     required IconData icon,
     TextInputType keyboardType = TextInputType.text,
     String? Function(String?)? validator,
+    bool readOnly = false,
+    VoidCallback? onTap,
   }) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
@@ -96,6 +117,8 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
             controller: controller,
             keyboardType: keyboardType,
             validator: validator,
+            readOnly: readOnly,
+            onTap: onTap,
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
@@ -219,9 +242,11 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
                 
                 _buildTextField(
                   label: '만료기간',
-                  hint: '예: 2026.12.31',
+                  hint: '날짜를 선택해 주세요',
                   controller: _expirationController,
                   icon: Icons.calendar_today_rounded,
+                  readOnly: true,
+                  onTap: () => _selectDate(context),
                   validator: (value) => value == null || value.trim().isEmpty ? '만료기간을 입력해주세요.' : null,
                 ),
                 

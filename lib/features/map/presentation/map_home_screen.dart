@@ -20,6 +20,7 @@ class MapHomeScreen extends ConsumerStatefulWidget {
 
 class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   KakaoMapController? _mapController;
+  final DraggableScrollableController _sheetController = DraggableScrollableController();
   Position? _currentPosition;
   bool _isLoading = true;
   bool _isSearchingStores = false;
@@ -31,6 +32,12 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     super.initState();
     _determinePosition();
     _initGeofencing();
+  }
+
+  @override
+  void dispose() {
+    _sheetController.dispose();
+    super.dispose();
   }
 
   Future<void> _initGeofencing() async {
@@ -48,6 +55,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   }
 
   Future<void> _determinePosition() async {
+    // ... 기존 코드와 동일 ...
     bool serviceEnabled;
     LocationPermission permission;
 
@@ -78,7 +86,6 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
           _currentPosition = position;
           _isLoading = false;
         });
-        // 위치를 가져온 직후 주변 매장 검색
         _fetchNearbyStores();
       }
     } catch (e) {
@@ -87,11 +94,11 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   }
 
   Future<void> _fetchNearbyStores() async {
+    // ... 기존 코드와 동일 ...
     if (_currentPosition == null) return;
 
     setState(() => _isSearchingStores = true);
 
-    // 1. 내 보관함에서 기프티콘 브랜드 목록 가져오기
     final gifticonState = ref.read(gifticonListProvider);
     if (!gifticonState.hasValue || gifticonState.value!.isEmpty) {
       if (mounted) {
@@ -104,16 +111,14 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     }
 
     final gifticons = gifticonState.value!;
-    // 중복 제거된 브랜드명 추출
     final brandNames = gifticons
-        .map((g) => g.brandName.trim()) // 공백 제거
+        .where((g) => g.isUsed != true)
+        .map((g) => g.brandName.trim())
         .where((brand) => brand != '알 수 없는 브랜드' && brand.isNotEmpty)
         .toSet()
         .toList();
 
     List<StoreModel> allStores = [];
-
-    // 2. 각 브랜드별로 로컬 API 검색
     for (String? brand in brandNames) {
       if (brand == null) continue;
       final stores = await _apiService.searchNearbyStores(
@@ -125,17 +130,38 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
       allStores.addAll(stores);
     }
 
-    // 3. 거리순 정렬
-    allStores.sort((a, b) => a.distance.compareTo(b.distance));
+    final filteredStores = allStores.where((store) {
+      return gifticons.any((g) => g.brandName == store.matchedBrand && g.isUsed != true);
+    }).toList();
 
-    // 4. 지오펜싱(배터리 최적화 알림) 설정
-    await GeofenceNotificationService().setupGeofences(allStores);
+    filteredStores.sort((a, b) => a.distance.compareTo(b.distance));
+    await GeofenceNotificationService().setupGeofences(filteredStores);
 
     if (mounted) {
       setState(() {
-        _nearbyStores = allStores;
+        _nearbyStores = filteredStores;
         _isSearchingStores = false;
       });
+    }
+  }
+
+  ScrollController? _innerScrollController;
+
+  Future<void> _moveToStore(StoreModel store) async {
+    if (_mapController != null) {
+      // 1. 내부 리스트 스크롤을 맨 위로 초기화
+      _innerScrollController?.jumpTo(0);
+
+      // 2. 패널을 최소 높이로 축소 (지도를 가리지 않게)
+      if (_sheetController.isAttached) {
+        await _sheetController.animateTo(
+          0.11, 
+          duration: const Duration(milliseconds: 300), 
+          curve: Curves.easeOut,
+        );
+      }
+      // 3. 지도 중심 이동
+      await _mapController!.setCenter(LatLng(store.latitude, store.longitude));
     }
   }
 
@@ -158,29 +184,39 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
             _currentPosition!.latitude,
             _currentPosition!.longitude,
           ),
-          // 내 위치는 빨간색 마커 이미지로 구분 (카카오 기본 마커와 차별화)
           markerImageSrc:
               'https://t1.daumcdn.net/localimg/localimages/07/mapapidoc/marker_red.png',
         ),
       );
 
       // 검색된 주변 매장 마커
+      final gifticons = ref.read(gifticonListProvider).value ?? [];
       final Set<String> existingIds = {'my_location'};
       for (var store in _nearbyStores) {
-        // 이미 추가된 마커 ID가 있다면 건너뛰기 (중복 마커 추가 에러 방지)
         if (existingIds.contains(store.id)) continue;
         existingIds.add(store.id);
 
-        // JavaScript 실행 시 따옴표(') 등으로 인한 마커 렌더링(함수) 예외 오류 방지 처리
         final safePlaceName = store.placeName
             .replaceAll("'", "\\'")
             .replaceAll('"', '&quot;');
+            
+        final matchedCount = gifticons
+            .where((g) => g.brandName == store.matchedBrand && g.isUsed != true)
+            .length;
+            
+        final infoText = matchedCount > 0 
+            ? '$safePlaceName ($matchedCount개)'
+            : safePlaceName;
 
         mapMarkers.add(
           Marker(
             markerId: store.id,
             latLng: LatLng(store.latitude, store.longitude),
-            infoWindowContent: '<div style="padding:4px;">$safePlaceName</div>',
+            infoWindowContent: 
+              '<div style="padding:10px; min-width:150px; text-align:center;">'
+              '<div style="font-weight:bold; font-size:14px; margin-bottom:4px; color:#1A237E;">$infoText</div>'
+              '<div style="font-size:11px; color:#666;">기프티콘 사용 가능 매장</div>'
+              '</div>',
           ),
         );
       }
@@ -207,6 +243,12 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
                   )
                 : KakaoMap(
                     onMapCreated: (controller) => _mapController = controller,
+                    onMarkerTap: (markerId, latLng, zoomLevel) {
+                      // 마커 클릭 시 해당 위치로 중심 이동
+                      if (markerId != 'my_location') {
+                        _mapController?.setCenter(latLng);
+                      }
+                    },
                     center: LatLng(
                       _currentPosition!.latitude,
                       _currentPosition!.longitude,
@@ -265,12 +307,14 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
 
           // 4. 스와이프 가능한 주변 가맹점 패널 (네비게이션 바 위에서 시작)
           DraggableScrollableSheet(
+            controller: _sheetController,
             initialChildSize: 0.11, // 최소 높이
             minChildSize: 0.11,
             maxChildSize: 0.7, // 좀 더 시원하게 볼 수 있도록 최대 높이 확대
             snap: true,
             snapSizes: const [0.11, 0.7],
             builder: (context, scrollController) {
+              _innerScrollController = scrollController;
               return Container(
                 decoration: BoxDecoration(
                   color: AppTheme.surfaceWhite,
@@ -299,16 +343,14 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // 실제 내용 영역
+                    // 실제 내용 영역 (ListView를 사용하여 드래그 연동 안정화)
                     Expanded(
-                      child: SingleChildScrollView(
-                        controller: scrollController,
-                        padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
-                        child: _NearbyGifticonPanel(
-                          stores: _nearbyStores,
-                          isSearching: _isSearchingStores,
-                          ref: ref,
-                        ),
+                      child: _NearbyGifticonPanel(
+                        stores: _nearbyStores,
+                        isSearching: _isSearchingStores,
+                        ref: ref,
+                        onStoreTap: _moveToStore,
+                        scrollController: scrollController,
                       ),
                     ),
                   ],
@@ -472,20 +514,27 @@ class _NearbyGifticonPanel extends StatelessWidget {
   final List<StoreModel> stores;
   final bool isSearching;
   final WidgetRef ref;
+  final Function(StoreModel)? onStoreTap;
+  final ScrollController scrollController;
 
   const _NearbyGifticonPanel({
     required this.stores,
     required this.isSearching,
     required this.ref,
+    this.onStoreTap,
+    required this.scrollController,
   });
 
   @override
   Widget build(BuildContext context) {
-    final gifticons = ref.read(gifticonListProvider).value ?? [];
+    // ref.watch를 사용하여 기프티콘 리스트 변화를 실시간으로 감시
+    final gifticons = ref.watch(gifticonListProvider).value ?? [];
 
-    return Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
+    return ListView(
+      controller: scrollController,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
+      // 시트가 최소 높이일 때도 드래그가 끊기지 않도록 설정
+      physics: const ClampingScrollPhysics(),
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -531,14 +580,20 @@ class _NearbyGifticonPanel extends StatelessWidget {
           ),
 
         if (!isSearching && stores.isNotEmpty)
-          ...stores.take(5).map((store) {
-            // 해당 매장 브랜드와 일치하는 내 기프티콘 개수 계산
+          ...stores.map((store) {
+            // 해당 매장 브랜드와 일치하는 내 '사용 가능한' 기프티콘 목록 필터링
             final matchedGifticons = gifticons
-                .where((g) => g.brandName == store.matchedBrand)
+                .where((g) => g.brandName == store.matchedBrand && g.isUsed != true)
                 .toList();
-            final badgeText = matchedGifticons.isNotEmpty
-                ? '${matchedGifticons.first.productName ?? '쿠폰'} 등 ${matchedGifticons.length}개'
-                : '사용 가능';
+            
+            String badgeText;
+            if (matchedGifticons.isEmpty) {
+              badgeText = '사용 가능';
+            } else if (matchedGifticons.length == 1) {
+              badgeText = matchedGifticons.first.productName;
+            } else {
+              badgeText = '${matchedGifticons.first.productName} 외 ${matchedGifticons.length - 1}개';
+            }
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 8.0),
@@ -546,6 +601,7 @@ class _NearbyGifticonPanel extends StatelessWidget {
                 title: store.placeName,
                 distance: '${store.distance.toInt()}m',
                 badgeText: badgeText,
+                onTap: () => onStoreTap?.call(store),
               ),
             );
           }),
@@ -558,70 +614,75 @@ class _StoreListItem extends StatelessWidget {
   final String title;
   final String distance;
   final String badgeText;
+  final VoidCallback? onTap;
 
   const _StoreListItem({
     required this.title,
     required this.distance,
     required this.badgeText,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: AppTheme.backgroundLight,
-        borderRadius: BorderRadius.circular(16),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.storefront_rounded, color: Colors.grey),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.backgroundLight,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.storefront_rounded, color: Colors.grey),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    distance,
+                    style: const TextStyle(
+                      color: AppTheme.primaryTeal,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppTheme.primaryTeal,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  badgeText,
                   style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 15,
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
                   ),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                Text(
-                  distance,
-                  style: const TextStyle(
-                    color: AppTheme.primaryTeal,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 13,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppTheme.primaryTeal,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                badgeText,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
