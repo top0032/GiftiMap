@@ -2,6 +2,7 @@ import 'package:riverpod_annotation/riverpod_annotation.dart';
 import '../../domain/models/gifticon_model.dart';
 import '../../data/repositories/gifticon_repository.dart';
 import '../../data/services/expiration_notification_service.dart';
+import 'package:giftimap/features/auth/presentation/providers/auth_provider.dart';
 
 part 'gifticon_provider.g.dart';
 
@@ -9,6 +10,8 @@ part 'gifticon_provider.g.dart';
 class GifticonList extends _$GifticonList {
   @override
   Future<List<GifticonModel>> build() async {
+    // 인증 상태를 감시하여 사용자가 바뀌면 자동으로 다시 build됨
+    ref.watch(authStateProvider);
     return _fetchGifticons();
   }
 

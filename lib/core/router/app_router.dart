@@ -10,6 +10,7 @@ import '../../features/gifticon/presentation/gifticon_manual_add_screen.dart';
 import '../../features/gifticon/domain/models/gifticon_model.dart';
 import '../../features/auth/presentation/screens/login_screen.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
+import '../../features/settings/presentation/screens/settings_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   // 인증 상태와 닉네임 상태를 모두 감시합니다.
@@ -61,6 +62,12 @@ final routerProvider = Provider<GoRouter>((ref) {
             path: '/wallet',
             pageBuilder: (context, state) => const NoTransitionPage(
               child: GifticonListScreen(),
+            ),
+          ),
+          GoRoute(
+            path: '/settings',
+            pageBuilder: (context, state) => const NoTransitionPage(
+              child: SettingsScreen(),
             ),
           ),
         ],

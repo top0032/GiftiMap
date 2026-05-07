@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class GifticonModel {
   final String id;
+  final String userId;       // 사용자 고유 ID 추가
   final String brandName;
   final String productName;
   final String expirationDate;
@@ -12,6 +13,7 @@ class GifticonModel {
 
   GifticonModel({
     required this.id,
+    required this.userId,
     required this.brandName,
     required this.productName,
     required this.expirationDate,
@@ -23,6 +25,7 @@ class GifticonModel {
 
   GifticonModel copyWith({
     String? id,
+    String? userId,
     String? brandName,
     String? productName,
     String? expirationDate,
@@ -33,6 +36,7 @@ class GifticonModel {
   }) {
     return GifticonModel(
       id: id ?? this.id,
+      userId: userId ?? this.userId,
       brandName: brandName ?? this.brandName,
       productName: productName ?? this.productName,
       expirationDate: expirationDate ?? this.expirationDate,
@@ -48,6 +52,7 @@ class GifticonModel {
     final data = doc.data() as Map<String, dynamic>;
     return GifticonModel(
       id: doc.id,
+      userId: data['userId'] ?? '',
       brandName: data['brandName'] ?? '브랜드 없음',
       productName: data['productName'] ?? '상품명 없음',
       expirationDate: data['expirationDate'] ?? '기한 없음',
@@ -61,6 +66,7 @@ class GifticonModel {
   // 모델 객체를 Firestore 문서 형식으로 변환
   Map<String, dynamic> toFirestore() {
     return {
+      'userId': userId,
       'brandName': brandName,
       'productName': productName,
       'expirationDate': expirationDate,
@@ -71,11 +77,9 @@ class GifticonModel {
     };
   }
 
-  // 남은 기간 파싱 및 D-Day 계산 로직 추가
-  int get remainingDays {
+  // 유효기간 문자열을 DateTime 객체로 변환하는 게터
+  DateTime? get parsedExpirationDate {
     try {
-      // expirationDate 형식이 'YYYY.MM.DD', 'YYYY-MM-DD' 또는 'YYYY년 MM월 DD일' 등 다양할 수 있으므로 정제
-      // [주의] 하이픈(-)이 캐릭터 클래스 중간에 있으면 범위를 뜻하게 되어 숫자까지 모두 매칭하는 버그 방지
       final regex = RegExp(r'(\d{4})[./년\s\-]*(\d{1,2})[./월\s\-]*(\d{1,2})');
       final match = regex.firstMatch(expirationDate);
       
@@ -84,16 +88,23 @@ class GifticonModel {
         final month = int.parse(match.group(2)!);
         final day = int.parse(match.group(3)!);
         
-        final expDate = DateTime(year, month, day);
-        final today = DateTime.now();
-        final todayOnly = DateTime(today.year, today.month, today.day);
-        
-        return expDate.difference(todayOnly).inDays;
+        return DateTime(year, month, day);
       }
-      return -999; // 날짜를 찾을 수 없음
+      return null;
     } catch (e) {
-      return -999; // 날짜 파싱 실패
+      return null;
     }
+  }
+
+  // 남은 기간 파싱 및 D-Day 계산 로직 추가
+  int get remainingDays {
+    final expDate = parsedExpirationDate;
+    if (expDate != null) {
+      final today = DateTime.now();
+      final todayOnly = DateTime(today.year, today.month, today.day);
+      return expDate.difference(todayOnly).inDays;
+    }
+    return -999;
   }
 
   String get dDayString {

@@ -29,6 +29,7 @@ class AppScaffold extends ConsumerWidget {
                 onPressed: () {
                   final newGifticon = GifticonModel(
                     id: '',
+                    userId: '', // 저장소에서 실제 로그인한 사용자의 UID로 덮어씌워집니다.
                     brandName: result.brandName ?? '알 수 없는 브랜드',
                     productName: result.productName ?? '알 수 없는 상품',
                     expirationDate: result.expirationDate ?? '유효기간 없음',
