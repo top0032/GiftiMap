@@ -38,7 +38,31 @@ class AppScaffold extends ConsumerWidget {
                   );
                   ref.read(gifticonListProvider.notifier).addGifticon(newGifticon);
                   Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('보관함에 저장되었습니다! 🎁')));
+
+                  final screenHeight = MediaQuery.of(context).size.height;
+                  final safeAreaTop = MediaQuery.of(context).padding.top;
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: const Text(
+                        '기프티콘이 등록되었습니다',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                      ),
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      margin: EdgeInsets.only(
+                        bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
+                        left: 50,
+                        right: 50,
+                      ),
+                      backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
+                      elevation: 0,
+                      duration: const Duration(seconds: 2),
+                    ),
+                  );
                 },
                 child: const Text('저장하기', style: TextStyle(color: Colors.white)),
               )

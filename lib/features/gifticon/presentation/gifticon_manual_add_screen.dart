@@ -64,9 +64,31 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
 
       ref.read(gifticonListProvider.notifier).addGifticon(newGifticon);
       
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final screenHeight = MediaQuery.of(context).size.height;
+      final safeAreaTop = MediaQuery.of(context).padding.top;
+      
       context.pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('기프티콘이 성공적으로 등록되었습니다! 🎁')),
+      scaffoldMessenger.showSnackBar(
+        SnackBar(
+          content: const Text(
+            '기프티콘이 등록되었습니다',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(30),
+          ),
+          margin: EdgeInsets.only(
+            bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
+            left: 50,
+            right: 50,
+          ),
+          backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
+          elevation: 0,
+          duration: const Duration(seconds: 2),
+        ),
       );
     }
   }

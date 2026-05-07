@@ -88,11 +88,34 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     ),
                     TextButton(
                       onPressed: () {
+                        final scaffoldMessenger = ScaffoldMessenger.of(context);
+                        final screenHeight = MediaQuery.of(context).size.height;
+                        final safeAreaTop = MediaQuery.of(context).padding.top;
+                        
                         ref.read(gifticonListProvider.notifier).deleteGifticon(currentGifticon.id);
                         Navigator.pop(context); // 다이얼로그 닫기
                         Navigator.pop(context); // 상세 화면 닫기
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text('기프티콘이 삭제되었습니다.')),
+                        
+                        scaffoldMessenger.showSnackBar(
+                          SnackBar(
+                            content: const Text(
+                              '기프티콘이 삭제되었습니다',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            margin: EdgeInsets.only(
+                              bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
+                              left: 50,
+                              right: 50,
+                            ),
+                            backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
+                            elevation: 0,
+                            duration: const Duration(seconds: 2),
+                          ),
                         );
                       },
                       child: const Text('삭제', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
