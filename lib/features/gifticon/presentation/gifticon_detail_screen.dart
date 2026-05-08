@@ -20,34 +20,13 @@ class GifticonDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
-  bool _isAuthenticated = false;
 
   @override
   void initState() {
     super.initState();
-    _authenticate(); // 진입 시 인증 수행
     _setMaxBrightness();
   }
 
-  Future<void> _authenticate() async {
-    final securityService = ref.read(securityServiceProvider);
-    final available = await securityService.isBiometricAvailable();
-    
-    if (available) {
-      final success = await securityService.authenticate();
-      if (mounted) {
-        setState(() {
-          _isAuthenticated = success;
-        });
-      }
-    } else {
-      // 생체 인식이 지원되지 않는 기기라면 바로 보여주거나 다른 처리를 할 수 있음
-      // 여기서는 일단 인증된 것으로 간주 (혹은 비밀번호 입력창 등으로 대체 가능)
-      setState(() {
-        _isAuthenticated = true;
-      });
-    }
-  }
 
   @override
   void dispose() {
@@ -309,44 +288,20 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     mainAxisSize: MainAxisSize.min,
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      if (_isAuthenticated)
-                        BarcodeWidget(
-                          barcode: Barcode.code128(),
-                          data: currentGifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''),
-                          width: double.infinity,
-                          height: 80, // 높이를 조금 줄여 여유 공간 확보
-                          errorBuilder: (context, error) => const Center(
-                            child: Text('바코드를 생성할 수 없습니다.\n올바른 번호인지 확인해주세요.', textAlign: TextAlign.center, style: TextStyle(color: Colors.red, fontSize: 12)),
-                          ),
-                          style: const TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2,
-                          ),
-                        )
-                      else
-                        GestureDetector(
-                          onTap: _authenticate,
-                          child: Container(
-                            width: double.infinity,
-                            height: 80,
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const Icon(Icons.lock_outline_rounded, color: AppTheme.secondaryNavy, size: 28),
-                                const SizedBox(height: 4),
-                                Text(
-                                  '터치하여 바코드 보기 (보안 인증)',
-                                  style: TextStyle(color: AppTheme.secondaryNavy.withOpacity(0.7), fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
+                      BarcodeWidget(
+                        barcode: Barcode.code128(),
+                        data: currentGifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''),
+                        width: double.infinity,
+                        height: 80,
+                        errorBuilder: (context, error) => const Center(
+                          child: Text('바코드를 생성할 수 없습니다.\n올바른 번호인지 확인해주세요.', textAlign: TextAlign.center, style: TextStyle(color: Colors.red, fontSize: 12)),
                         ),
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
                     ],
                   ),
                 ),

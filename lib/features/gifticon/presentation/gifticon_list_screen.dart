@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'dart:io';
 import '../../../core/theme/theme.dart';
+import '../../../core/services/security_service.dart';
 import 'providers/gifticon_provider.dart';
 import '../domain/models/gifticon_model.dart';
 
@@ -15,6 +16,7 @@ class GifticonListScreen extends ConsumerStatefulWidget {
 
 class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
+  bool _isUnlocked = false; // 보관함 잠금 상태 관리
 
   @override
   void initState() {
@@ -25,6 +27,20 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
         setState(() {});
       }
     });
+    
+    // 화면 진입 시 즉시 보안 인증 실행
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _authenticate();
+    });
+  }
+
+  Future<void> _authenticate() async {
+    final success = await SecurityService().authenticate();
+    if (success) {
+      setState(() {
+        _isUnlocked = true;
+      });
+    }
   }
 
   @override
@@ -46,127 +62,128 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       body: SafeArea(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(24.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: RichText(
-                      text: TextSpan(
-                        text: '보관함에 ',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w400,
-                          color: AppTheme.secondaryNavy,
-                          height: 1.3,
-                        ),
-                        children: [
-                          TextSpan(
-                            text: '$currentCount개의\n',
+        child: _isUnlocked 
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Expanded(
+                        child: RichText(
+                          text: TextSpan(
+                            text: '보관함에 ',
                             style: const TextStyle(
-                              fontWeight: FontWeight.w800,
-                              color: AppTheme.primaryTeal,
-                            ),
-                          ),
-                          TextSpan(
-                            text: '$statusText 기프티콘이 있어요',
-                            style: const TextStyle(
+                              fontSize: 22,
                               fontWeight: FontWeight.w400,
                               color: AppTheme.secondaryNavy,
+                              height: 1.3,
+                            ),
+                            children: [
+                              TextSpan(
+                                text: '$currentCount개의\n',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  color: AppTheme.primaryTeal,
+                                ),
+                              ),
+                              TextSpan(
+                                text: '$statusText 기프티콘이 있어요',
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w400,
+                                  color: AppTheme.secondaryNavy,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      CircleAvatar(
+                        backgroundColor: AppTheme.surfaceWhite,
+                        radius: 24,
+                        child: IconButton(
+                          icon: const Icon(Icons.settings_rounded, color: AppTheme.secondaryNavy),
+                          onPressed: () {
+                            context.push('/settings');
+                          },
+                        ),
+                      )
+                    ],
+                  ),
+                ),
+                
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 24),
+                  child: TabBar(
+                    controller: _tabController,
+                    dividerColor: Colors.transparent,
+                    indicatorColor: AppTheme.primaryTeal,
+                    indicatorWeight: 3,
+                    labelColor: AppTheme.primaryTeal,
+                    unselectedLabelColor: Colors.grey,
+                    labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    unselectedLabelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    tabs: const [
+                      Tab(text: '사용 가능'),
+                      Tab(text: '사용 완료'),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 8),
+                
+                Expanded(
+                  child: gifticonsAsyncValue.when(
+                    loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
+                    error: (error, stack) => Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 24),
+                            child: Text(
+                              '데이터를 불러오는 중 오류가 발생했습니다.\n$error',
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(color: Colors.red),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton.icon(
+                            onPressed: () => ref.invalidate(gifticonListProvider),
+                            icon: const Icon(Icons.refresh_rounded),
+                            label: const Text('새로고침'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppTheme.primaryTeal,
+                              foregroundColor: Colors.white,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                  const SizedBox(width: 16),
-                  CircleAvatar(
-                    backgroundColor: AppTheme.surfaceWhite,
-                    radius: 24,
-                    child: IconButton(
-                      icon: const Icon(Icons.settings_rounded, color: AppTheme.secondaryNavy),
-                      onPressed: () {
-                        context.push('/settings');
-                      },
-                    ),
-                  )
-                ],
-              ),
-            ),
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: TabBar(
-                controller: _tabController,
-                dividerColor: Colors.transparent,
-                indicatorColor: AppTheme.primaryTeal,
-                indicatorWeight: 3,
-                labelColor: AppTheme.primaryTeal,
-                unselectedLabelColor: Colors.grey,
-                labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                unselectedLabelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                tabs: const [
-                  Tab(text: '사용 가능'),
-                  Tab(text: '사용 완료'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            
-            Expanded(
-              child: gifticonsAsyncValue.when(
-                loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
-                error: (error, stack) => Center(
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 24),
-                        child: Text(
-                          '데이터를 불러오는 중 오류가 발생했습니다.\n$error',
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.red),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                      ElevatedButton.icon(
-                        onPressed: () => ref.invalidate(gifticonListProvider),
-                        icon: const Icon(Icons.refresh_rounded),
-                        label: const Text('새로고침'),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.primaryTeal,
-                          foregroundColor: Colors.white,
-                        ),
-                      ),
-                    ],
+                    data: (gifticons) {
+                      if (gifticons.isEmpty) {
+                        return const Center(child: Text('보관함이 비어있습니다.\n하단의 + 버튼을 눌러 기프티콘을 추가해보세요!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
+                      }
+                      
+                      final availableGifticons = gifticons.where((g) => g.isUsed != true).toList();
+                      final usedGifticons = gifticons.where((g) => g.isUsed == true).toList();
+                      
+                      return TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildGifticonList(availableGifticons, context),
+                          _buildGifticonList(usedGifticons, context, isArchive: true),
+                        ],
+                      );
+                    },
                   ),
                 ),
-                data: (gifticons) {
-                  if (gifticons.isEmpty) {
-                    return const Center(child: Text('보관함이 비어있습니다.\n하단의 + 버튼을 눌러 기프티콘을 추가해보세요!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
-                  }
-                  
-                  final availableGifticons = gifticons.where((g) => g.isUsed != true).toList();
-                  final usedGifticons = gifticons.where((g) => g.isUsed == true).toList();
-                  
-                  return TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildGifticonList(availableGifticons, context),
-                      _buildGifticonList(usedGifticons, context, isArchive: true),
-                    ],
-                  );
-                },
-              ),
-            ),
-            
-            const SizedBox(height: 100),
-          ],
-        ),
+                const SizedBox(height: 100),
+              ],
+            )
+          : _buildLockedUI(), // 미인증 시 잠금 화면 표시
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
@@ -178,6 +195,56 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
         label: const Text('기프티콘 등록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
+    );
+  }
+
+  Widget _buildLockedUI() {
+    return Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryTeal.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.lock_rounded, size: 64, color: AppTheme.primaryTeal),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            '보관함이 잠겨 있습니다',
+            style: TextStyle(
+              fontSize: 20,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.secondaryNavy,
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            '기프티콘 목록을 확인하려면\n보안 인증이 필요합니다.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 15,
+              color: Colors.grey,
+            ),
+          ),
+          const SizedBox(height: 32),
+          ElevatedButton.icon(
+            onPressed: _authenticate,
+            icon: const Icon(Icons.fingerprint_rounded),
+            label: const Text('인증하고 열기', style: TextStyle(fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.primaryTeal,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
