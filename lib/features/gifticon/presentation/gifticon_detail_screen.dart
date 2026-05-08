@@ -237,9 +237,11 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                 ),
               ),
               const SizedBox(height: 30),
-              // 유효기간 및 D-Day
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
+              // 유효기간 및 D-Day (가로 오버플로 방지를 위해 Wrap 사용)
+              Wrap(
+                alignment: WrapAlignment.center,
+                spacing: 12, // 가로 간격
+                runSpacing: 10, // 세로 간격 (줄바꿈 발생 시)
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -251,13 +253,12 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     child: Text(
                       '유효기간: ${currentGifticon.expirationDate}',
                       style: const TextStyle(
-                        fontSize: 15,
+                        fontSize: 14, // 폰트 사이즈 살짝 조정
                         fontWeight: FontWeight.w600,
                         color: AppTheme.secondaryNavy,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
                   Builder(
                     builder: (context) {
                       final days = currentGifticon.remainingDays;
@@ -275,7 +276,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                         child: Text(
                           currentGifticon.dDayString,
                           style: TextStyle(
-                            fontSize: 15,
+                            fontSize: 14,
                             fontWeight: FontWeight.w800,
                             color: isExpired 
                                 ? Colors.grey.shade600 

@@ -194,22 +194,38 @@ class OcrParser {
 
   /// 바코드 번호 (연속된 12자리 이상 숫자) 추출
   static String? extractBarcodeNumber(String text) {
-    // 공백이나 하이픈을 포함하여 연속된 숫자를 찾는 정규식
-    final RegExp barcodeRegExp = RegExp(r'\d{4}[\s\-]*\d{4}[\s\-]*\d{4}[\s\-]*\d{0,4}');
+    // 1. 숫자 사이의 공백이나 하이픈을 허용하는 더 유연한 정규식
+    // 12~16자리의 숫자를 찾음 (공백/하이픈 포함 가능)
+    final RegExp barcodeRegExp = RegExp(r'(\d[\s\-]*){12,16}');
     
-    // 전체 텍스트에서 매치되는 부분 찾기
     final matches = barcodeRegExp.allMatches(text);
+    List<String> candidates = [];
+
     for (final match in matches) {
       String? matchedString = match.group(0);
       if (matchedString != null) {
-        // 공백과 하이픈 제거
-        String cleanNumber = matchedString.replaceAll(RegExp(r'[\s\-]'), '');
-        // 12자리 이상인 경우만 리턴
-        if (cleanNumber.length >= 12) {
-          return cleanNumber;
+        // 공백과 하이픈 제거하여 순수 숫자만 추출
+        String cleanNumber = matchedString.replaceAll(RegExp(r'[^0-9]'), '');
+        // 12, 14, 16자리일 확률이 높으므로 유효성 체크
+        if (cleanNumber.length >= 12 && cleanNumber.length <= 16) {
+          candidates.add(cleanNumber);
         }
       }
     }
-    return null;
+
+    if (candidates.isEmpty) return null;
+
+    // 2. 여러 후보 중 바코드 번호일 가능성이 가장 높은 것 선택
+    // 보통 가장 긴 숫자가 바코드 번호일 확률이 높음
+    candidates.sort((a, b) => b.length.compareTo(a.length));
+    
+    // 3. 12, 14, 16자리에 딱 떨어지는 것이 있다면 우선순위 부여
+    for (final candidate in candidates) {
+      if (candidate.length == 12 || candidate.length == 14 || candidate.length == 16) {
+        return candidate;
+      }
+    }
+
+    return candidates.first;
   }
 }
