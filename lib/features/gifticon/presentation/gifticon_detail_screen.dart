@@ -7,6 +7,8 @@ import 'package:go_router/go_router.dart';
 import '../domain/models/gifticon_model.dart';
 import '../../../core/theme/theme.dart';
 import 'providers/gifticon_provider.dart';
+import '../../../core/services/security_service.dart';
+import 'dart:ui'; // 블러 효과용
 
 class GifticonDetailScreen extends ConsumerStatefulWidget {
   final GifticonModel gifticon;
@@ -18,10 +20,33 @@ class GifticonDetailScreen extends ConsumerStatefulWidget {
 }
 
 class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
+  bool _isAuthenticated = false;
+
   @override
   void initState() {
     super.initState();
+    _authenticate(); // 진입 시 인증 수행
     _setMaxBrightness();
+  }
+
+  Future<void> _authenticate() async {
+    final securityService = ref.read(securityServiceProvider);
+    final available = await securityService.isBiometricAvailable();
+    
+    if (available) {
+      final success = await securityService.authenticate();
+      if (mounted) {
+        setState(() {
+          _isAuthenticated = success;
+        });
+      }
+    } else {
+      // 생체 인식이 지원되지 않는 기기라면 바로 보여주거나 다른 처리를 할 수 있음
+      // 여기서는 일단 인증된 것으로 간주 (혹은 비밀번호 입력창 등으로 대체 가능)
+      setState(() {
+        _isAuthenticated = true;
+      });
+    }
   }
 
   @override
@@ -133,7 +158,7 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
+        child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -157,11 +182,21 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     ],
                   ),
                   clipBehavior: Clip.antiAlias,
-                  child: Image.file(
-                    File(currentGifticon.imageUrl!),
-                    fit: BoxFit.cover,
-                    errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                  ),
+                  child: currentGifticon.imageUrl!.startsWith('http')
+                    ? Image.network(
+                        currentGifticon.imageUrl!,
+                        fit: BoxFit.cover,
+                        loadingBuilder: (context, child, loadingProgress) {
+                          if (loadingProgress == null) return child;
+                          return const Center(child: CircularProgressIndicator());
+                        },
+                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                      )
+                    : Image.file(
+                        File(currentGifticon.imageUrl!),
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                      ),
                 ),
               // 상태 배지 추가
               Container(
@@ -267,26 +302,55 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     ),
                   ],
                 ),
-                child: Column(
-                  children: [
-                    BarcodeWidget(
-                      barcode: Barcode.code128(), // 주로 쓰이는 범용 바코드 포맷
-                      data: currentGifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''), // 렌더링 오류 방지를 위해 숫자/영문자만 추출
-                      width: double.infinity,
-                      height: 100,
-                      errorBuilder: (context, error) => const Center(
-                        child: Text('바코드를 생성할 수 없습니다.\n올바른 번호인지 확인해주세요.', textAlign: TextAlign.center, style: TextStyle(color: Colors.red)),
-                      ),
-                      style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 2,
-                      ),
-                    ),
-                  ],
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(minHeight: 120),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (_isAuthenticated)
+                        BarcodeWidget(
+                          barcode: Barcode.code128(),
+                          data: currentGifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''),
+                          width: double.infinity,
+                          height: 80, // 높이를 조금 줄여 여유 공간 확보
+                          errorBuilder: (context, error) => const Center(
+                            child: Text('바코드를 생성할 수 없습니다.\n올바른 번호인지 확인해주세요.', textAlign: TextAlign.center, style: TextStyle(color: Colors.red, fontSize: 12)),
+                          ),
+                          style: const TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                          ),
+                        )
+                      else
+                        GestureDetector(
+                          onTap: _authenticate,
+                          child: Container(
+                            width: double.infinity,
+                            height: 80,
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                const Icon(Icons.lock_outline_rounded, color: AppTheme.secondaryNavy, size: 28),
+                                const SizedBox(height: 4),
+                                Text(
+                                  '터치하여 바코드 보기 (보안 인증)',
+                                  style: TextStyle(color: AppTheme.secondaryNavy.withOpacity(0.7), fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                 ),
               ),
-              const Spacer(),
+              const SizedBox(height: 40),
               // 결제 완료/사용 완료 처리 버튼
               if (currentGifticon.isUsed != true)
                 SizedBox(

@@ -1,8 +1,11 @@
 import 'package:flutter/foundation.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../domain/models/ocr_result_model.dart';
 import '../../utils/ocr_parser.dart';
+
+final ocrServiceProvider = Provider((ref) => OcrService());
 
 class OcrService {
   final ImagePicker _picker = ImagePicker();
@@ -19,16 +22,17 @@ class OcrService {
       final inputImage = InputImage.fromFilePath(image.path);
       final RecognizedText recognizedText = await _textRecognizer.processImage(inputImage);
       
-      final String rawText = recognizedText.text;
-      
-      final parsedData = OcrParser.parseText(rawText);
+      final parsedData = OcrParser.parseEnhanced(recognizedText);
 
       return OcrResultModel(
-        rawText: rawText,
+        rawText: recognizedText.text,
         expirationDate: parsedData['expirationDate'],
         barcodeNumber: parsedData['barcodeNumber'],
         brandName: parsedData['brandName'],
         productName: parsedData['productName'],
+        category: parsedData['category'],
+        logoPath: parsedData['logoPath'],
+        imagePath: image.path,
       );
     } catch (e) {
       print('OCR Error: $e');

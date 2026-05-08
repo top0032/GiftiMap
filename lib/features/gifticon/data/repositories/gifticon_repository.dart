@@ -1,5 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:io';
 import '../../domain/models/gifticon_model.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -21,12 +23,18 @@ class GifticonRepository {
     final userId = _currentUserId;
     if (userId == null) throw Exception('로그인이 필요합니다.');
 
-    final data = gifticon.copyWith(userId: userId).toFirestore();
+    // 로컬 저장 방식이므로 별도의 업로드 없이 전달받은 데이터 그대로 사용
+    final gifticonToSave = gifticon.copyWith(
+      userId: userId,
+    );
+    
+    final data = gifticonToSave.toFirestore();
     
     // 바코드 번호 암호화
     final encryptedBarcode = EncryptionService().encryptText(gifticon.barcodeNumber);
     data['barcodeNumber'] = encryptedBarcode;
 
+    // Firestore에 텍스트 데이터와 로컬 이미지 경로 저장
     if (gifticon.id.isEmpty) {
       await _collection.add(data);
     } else {

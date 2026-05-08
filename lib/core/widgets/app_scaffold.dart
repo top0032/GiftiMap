@@ -1,7 +1,10 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../theme/theme.dart';
 import '../../features/gifticon/presentation/providers/ocr_provider.dart';
 import '../../features/gifticon/domain/models/gifticon_model.dart';
@@ -26,14 +29,32 @@ class AppScaffold extends ConsumerWidget {
               TextButton(onPressed: () => Navigator.pop(context), child: const Text('취소')),
               ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: AppTheme.primaryTeal),
-                onPressed: () {
+                onPressed: () async {
+                  String? savedImageUrl;
+                  
+                  // 1. 이미지 영구 저장 로직 추가
+                  if (result.imagePath != null) {
+                    try {
+                      final File tempFile = File(result.imagePath!);
+                      final appDir = await getApplicationDocumentsDirectory();
+                      final String fileName = 'gifticon_${DateTime.now().millisecondsSinceEpoch}${path.extension(result.imagePath!)}';
+                      final String savedPath = path.join(appDir.path, fileName);
+                      
+                      final File savedFile = await tempFile.copy(savedPath);
+                      savedImageUrl = savedFile.path;
+                    } catch (e) {
+                      debugPrint('이미지 영구 저장 실패: $e');
+                    }
+                  }
+
                   final newGifticon = GifticonModel(
                     id: '',
-                    userId: '', // 저장소에서 실제 로그인한 사용자의 UID로 덮어씌워집니다.
+                    userId: '',
                     brandName: result.brandName ?? '알 수 없는 브랜드',
                     productName: result.productName ?? '알 수 없는 상품',
                     expirationDate: result.expirationDate ?? '유효기간 없음',
                     barcodeNumber: result.barcodeNumber ?? '바코드 인식 실패',
+                    imageUrl: savedImageUrl, // 복사된 영구 경로 저장
                     createdAt: DateTime.now(),
                   );
                   ref.read(gifticonListProvider.notifier).addGifticon(newGifticon);

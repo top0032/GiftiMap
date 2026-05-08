@@ -1,11 +1,16 @@
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as path;
 import '../../../core/theme/theme.dart';
 import '../domain/models/gifticon_model.dart';
 import 'providers/gifticon_provider.dart';
+import '../data/services/ocr_service.dart';
+import '../utils/ocr_parser.dart';
 
 class GifticonManualAddScreen extends ConsumerStatefulWidget {
   const GifticonManualAddScreen({super.key});
@@ -21,6 +26,8 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
   final _expirationController = TextEditingController();
   final _barcodeController = TextEditingController();
   File? _selectedImage;
+  bool _isProcessingOcr = false;
+  bool _isSaving = false;
 
   @override
   void dispose() {
@@ -36,60 +43,113 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
       final picker = ImagePicker();
       final pickedFile = await picker.pickImage(source: ImageSource.gallery);
       if (pickedFile != null) {
+        final File tempFile = File(pickedFile.path);
+        
+        // 1. 앱의 영구 문서 디렉토리 가져오기
+        final appDir = await getApplicationDocumentsDirectory();
+        final String fileName = 'gifticon_${DateTime.now().millisecondsSinceEpoch}${path.extension(pickedFile.path)}';
+        final String savedPath = path.join(appDir.path, fileName);
+
+        // 2. 임시 파일을 영구 디렉토리로 복사
+        final File savedFile = await tempFile.copy(savedPath);
+
         setState(() {
-          _selectedImage = File(pickedFile.path);
+          _selectedImage = savedFile; // 복사된 영구 파일로 교체
+          _isProcessingOcr = true;
         });
+
+        // OCR 처리 시작
+        final ocrService = ref.read(ocrServiceProvider);
+        final inputImage = InputImage.fromFilePath(pickedFile.path);
+        
+        // OCR 서비스의 메서드를 직접 쓰지 않고 TextRecognizer를 직접 쓰거나 서비스를 통해 처리
+        // 여기서는 서비스의 processImage가 ImagePicker를 내포하고 있으므로, 
+        // 이미 선택된 파일을 처리하는 메서드를 별도로 만들거나 existing logic 활용
+        // 임시로 서비스의 processImage 대신 직접 파싱 로직을 타게 함 (이미 파일을 선택했으므로)
+        final textRecognizer = TextRecognizer(script: TextRecognitionScript.korean);
+        final recognizedText = await textRecognizer.processImage(inputImage);
+        final parsedData = OcrParser.parseEnhanced(recognizedText);
+        textRecognizer.close();
+
+        setState(() {
+          if (parsedData['brandName'] != null) _brandController.text = parsedData['brandName']!;
+          if (parsedData['productName'] != null) _productController.text = parsedData['productName']!;
+          if (parsedData['expirationDate'] != null) _expirationController.text = parsedData['expirationDate']!;
+          if (parsedData['barcodeNumber'] != null) _barcodeController.text = parsedData['barcodeNumber']!;
+          _isProcessingOcr = false;
+        });
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('이미지 정보를 자동으로 읽어왔습니다.')),
+          );
+        }
       }
     } catch (e) {
+      setState(() => _isProcessingOcr = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('이미지를 불러오는데 실패했습니다: $e')),
+          SnackBar(content: Text('정보를 읽어오는데 실패했습니다: $e')),
         );
       }
     }
   }
 
-  void _saveGifticon() {
+  Future<void> _saveGifticon() async {
     if (_formKey.currentState!.validate()) {
-      final newGifticon = GifticonModel(
-        id: DateTime.now().millisecondsSinceEpoch.toString(), // 로컬에서 임시 고유 ID 생성
-        userId: '', // 저장소에서 실제 로그인한 사용자의 UID로 덮어씌워집니다.
-        brandName: _brandController.text,
-        productName: _productController.text,
-        expirationDate: _expirationController.text,
-        barcodeNumber: _barcodeController.text.isEmpty ? '미등록' : _barcodeController.text,
-        createdAt: DateTime.now(),
-        imageUrl: _selectedImage?.path,
-      );
+      setState(() => _isSaving = true);
+      
+      try {
+        final newGifticon = GifticonModel(
+          id: '', // 리포지토리에서 새 문서로 추가하도록 빈 값 설정
+          userId: '', 
+          brandName: _brandController.text,
+          productName: _productController.text,
+          expirationDate: _expirationController.text,
+          barcodeNumber: _barcodeController.text.isEmpty ? '미등록' : _barcodeController.text,
+          createdAt: DateTime.now(),
+          imageUrl: _selectedImage?.path,
+        );
 
-      ref.read(gifticonListProvider.notifier).addGifticon(newGifticon);
-      
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
-      final screenHeight = MediaQuery.of(context).size.height;
-      final safeAreaTop = MediaQuery.of(context).padding.top;
-      
-      context.pop();
-      scaffoldMessenger.showSnackBar(
-        SnackBar(
-          content: const Text(
-            '기프티콘이 등록되었습니다',
-            textAlign: TextAlign.center,
-            style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        await ref.read(gifticonListProvider.notifier).addGifticon(newGifticon);
+        
+        if (!mounted) return;
+        
+        final scaffoldMessenger = ScaffoldMessenger.of(context);
+        final screenHeight = MediaQuery.of(context).size.height;
+        final safeAreaTop = MediaQuery.of(context).padding.top;
+        
+        context.pop();
+        scaffoldMessenger.showSnackBar(
+          SnackBar(
+            content: const Text(
+              '기프티콘이 등록되었습니다',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(30),
+            ),
+            margin: EdgeInsets.only(
+              bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
+              left: 50,
+              right: 50,
+            ),
+            backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
+            elevation: 0,
+            duration: const Duration(seconds: 2),
           ),
-          behavior: SnackBarBehavior.floating,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(30),
-          ),
-          margin: EdgeInsets.only(
-            bottom: screenHeight - safeAreaTop - kToolbarHeight - 170,
-            left: 50,
-            right: 50,
-          ),
-          backgroundColor: AppTheme.secondaryNavy.withOpacity(0.9),
-          elevation: 0,
-          duration: const Duration(seconds: 2),
-        ),
-      );
+        );
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('저장에 실패했습니다: $e')),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _isSaving = false);
+      }
     }
   }
 
@@ -286,15 +346,22 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
                 SizedBox(
                   height: 56,
                   child: ElevatedButton(
-                    onPressed: _saveGifticon,
+                    onPressed: (_isSaving || _isProcessingOcr) ? null : _saveGifticon,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: AppTheme.primaryTeal,
+                      disabledBackgroundColor: AppTheme.primaryTeal.withOpacity(0.6),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
                       elevation: 0,
                     ),
-                    child: const Text('보관함에 저장하기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                    child: _isSaving 
+                      ? const SizedBox(
+                          height: 20, 
+                          width: 20, 
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                        )
+                      : const Text('보관함에 저장하기', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   ),
                 ),
                 const SizedBox(height: 48),

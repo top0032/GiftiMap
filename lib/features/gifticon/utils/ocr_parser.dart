@@ -1,5 +1,89 @@
+import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import '../domain/models/brand_info.dart';
+
 class OcrParser {
-  /// 텍스트 블록에서 주요 정보를 추출하는 메인 함수
+  /// 텍스트 블록 기반 고도화된 추출 함수
+  static Map<String, String?> parseEnhanced(RecognizedText recognizedText) {
+    String? brandName;
+    String? productName;
+    String? expirationDate;
+    String? barcodeNumber;
+    String? category;
+    String? logoPath;
+
+    final String rawText = recognizedText.text;
+
+    // 1. 텍스트 블록 순회하며 위치 기반 분석
+    for (TextBlock block in recognizedText.blocks) {
+      for (TextLine line in block.lines) {
+        final text = line.text.trim();
+        
+        // 브랜드 추출 (상단 블록 우선)
+        if (brandName == null) {
+          brandName = extractBrandName(text);
+          if (brandName != null) {
+            final details = getBrandDetails(brandName);
+            category = details['category'];
+            logoPath = details['logoPath'];
+          }
+        }
+
+        // 유효기간 키워드 발견 시 근처 텍스트 확인
+        if (text.contains('유효기간') || text.contains('까지') || text.contains('만료')) {
+          expirationDate ??= extractExpirationDate(text);
+          // 만약 현재 라인에 날짜가 없다면 블록 내 다른 라인 확인
+          if (expirationDate == null) {
+            for (var l in block.lines) {
+              expirationDate = extractExpirationDate(l.text);
+              if (expirationDate != null) break;
+            }
+          }
+        }
+
+        // 바코드 번호 (보통 하단에 긴 숫자)
+        barcodeNumber ??= extractBarcodeNumber(text);
+      }
+    }
+
+    // 2. 블록 분석으로 못 찾은 경우 전체 텍스트에서 재검색
+    brandName ??= extractBrandName(rawText);
+    if (brandName != null && category == null) {
+      final details = getBrandDetails(brandName);
+      category = details['category'];
+      logoPath = details['logoPath'];
+    }
+    
+    productName ??= extractProductName(rawText);
+    expirationDate ??= extractExpirationDate(rawText);
+    barcodeNumber ??= extractBarcodeNumber(rawText);
+
+    return {
+      'brandName': brandName,
+      'productName': productName,
+      'expirationDate': expirationDate,
+      'barcodeNumber': barcodeNumber,
+      'category': category,
+      'logoPath': logoPath,
+    };
+  }
+
+  /// 브랜드 상세 정보 매핑
+  static Map<String, String?> getBrandDetails(String? detectedName) {
+    if (detectedName == null) return {};
+    
+    // 브랜드 맵에서 일치하는 정보 확인 (부분 일치 포함)
+    for (var entry in brandMap.entries) {
+      if (detectedName.contains(entry.key) || entry.key.contains(detectedName)) {
+        return {
+          'category': entry.value.category,
+          'logoPath': entry.value.logoAsset,
+        };
+      }
+    }
+    return {};
+  }
+
+  /// 텍스트 블록에서 주요 정보를 추출하는 메인 함수 (하위 호환용)
   static Map<String, String?> parseText(String rawText) {
     return {
       'expirationDate': extractExpirationDate(rawText),
