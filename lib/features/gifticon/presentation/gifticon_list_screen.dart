@@ -282,17 +282,13 @@ class _GifticonCard extends StatelessWidget {
                                 0.2126, 0.7152, 0.0722, 0, 0,
                                 0,      0,      0,      1, 0,
                               ]),
-                              child: Image.file(
-                                File(imageUrl!),
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey)),
-                              ),
+                              child: imageUrl!.startsWith('http')
+                                  ? Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey)))
+                                  : Image.file(File(imageUrl!), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey))),
                             )
-                          : Image.file(
-                              File(imageUrl!),
-                              fit: BoxFit.cover,
-                              errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey)),
-                            ))
+                          : (imageUrl!.startsWith('http')
+                              ? Image.network(imageUrl!, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey)))
+                              : Image.file(File(imageUrl!), fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, color: Colors.grey)))))
                       : const Center(
                           child: Icon(Icons.coffee_rounded, color: Colors.grey, size: 40),
                         ),
