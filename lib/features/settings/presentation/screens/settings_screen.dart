@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/theme/theme.dart';
 import '../../domain/models/notification_settings.dart';
 import '../providers/settings_provider.dart';
+import '../../../../core/services/security_service.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -15,7 +16,7 @@ class SettingsScreen extends ConsumerWidget {
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('알림 설정', style: TextStyle(color: AppTheme.secondaryNavy, fontWeight: FontWeight.bold)),
+        title: const Text('설정', style: TextStyle(color: AppTheme.secondaryNavy, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
@@ -27,17 +28,52 @@ class SettingsScreen extends ConsumerWidget {
       body: settingsAsync.when(
         loading: () => const Center(child: CircularProgressIndicator(color: AppTheme.primaryTeal)),
         error: (error, stack) => Center(child: Text('설정을 불러오지 못했습니다: $error')),
-        data: (settings) => SingleChildScrollView(
-          child: Column(
-            children: [
-              _buildToggleSection(context, ref, settings.isEnabled),
-              if (settings.isEnabled) ...[
-                const Divider(height: 1),
-                _buildAlertListSection(context, ref, settings.alerts),
+        data: (settings) {
+          final isSecurityOn = ref.watch(securityToggleProvider);
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildSecurityToggleSection(context, ref, isSecurityOn),
+                Divider(height: 8, thickness: 8, color: Colors.grey.shade100),
+                _buildToggleSection(context, ref, settings.isEnabled),
+                if (settings.isEnabled) ...[
+                  const Divider(height: 1),
+                  _buildAlertListSection(context, ref, settings.alerts),
+                ],
               ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildSecurityToggleSection(BuildContext context, WidgetRef ref, bool isSecurityOn) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '보안 인증',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
+              ),
+              SizedBox(height: 4),
+              Text(
+                '기프티콘 확인 시 지문/패턴 인증을 사용합니다.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
             ],
           ),
-        ),
+          Switch.adaptive(
+            value: isSecurityOn,
+            activeColor: AppTheme.primaryTeal,
+            onChanged: (value) => ref.read(securityToggleProvider.notifier).toggle(value),
+          ),
+        ],
       ),
     );
   }

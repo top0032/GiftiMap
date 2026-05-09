@@ -2,6 +2,20 @@ import 'package:local_auth/local_auth.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+class SecurityToggleNotifier extends Notifier<bool> {
+  @override
+  bool build() => true;
+
+  void toggle(bool value) {
+    state = value;
+  }
+}
+
+// 앱 재시작 시마다 true로 초기화되는 인메모리 보안 설정
+final securityToggleProvider = NotifierProvider<SecurityToggleNotifier, bool>(() {
+  return SecurityToggleNotifier();
+});
+
 final securityServiceProvider = Provider((ref) => SecurityService());
 
 class SecurityService {

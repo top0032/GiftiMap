@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -11,6 +12,7 @@ import '../data/services/geofence_notification_service.dart';
 import '../domain/models/store_model.dart';
 import '../../gifticon/presentation/providers/gifticon_provider.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
+import '../../../core/services/security_service.dart';
 
 class MapHomeScreen extends ConsumerStatefulWidget {
   const MapHomeScreen({super.key});
@@ -519,6 +521,17 @@ class _ProfileButton extends ConsumerWidget {
                 ),
                 const SizedBox(height: 16),
                 const Divider(),
+                // 앱 나가기 버튼
+                ListTile(
+                  leading: const Icon(Icons.exit_to_app_rounded, color: AppTheme.secondaryNavy),
+                  title: const Text(
+                    '앱 나가기',
+                    style: TextStyle(color: AppTheme.secondaryNavy, fontWeight: FontWeight.bold),
+                  ),
+                  onTap: () {
+                    SystemNavigator.pop();
+                  },
+                ),
                 // 로그아웃 버튼
                 ListTile(
                   leading: const Icon(Icons.logout, color: Colors.redAccent),
@@ -725,8 +738,30 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                 distance: '${store.distance.toInt()}m',
                 badgeText: badgeText,
                 onLocationTap: () => widget.onStoreTap?.call(store),
-                onGifticonTap: () {
+                onGifticonTap: () async {
                   if (matchedGifticons.isNotEmpty) {
+                    final isSecurityOn = widget.ref.read(securityToggleProvider);
+                    bool isAuthenticated = false;
+
+                    if (!isSecurityOn) {
+                      isAuthenticated = true;
+                    } else {
+                      final securityService = widget.ref.read(securityServiceProvider);
+                      final isAvailable = await securityService.isBiometricAvailable();
+                      
+                      if (isAvailable) {
+                        isAuthenticated = await securityService.authenticate(
+                          reason: '기프티콘을 확인하려면 인증이 필요합니다.',
+                        );
+                      } else {
+                        // 생체 인식을 사용할 수 없는 기기인 경우 통과 (또는 기존 앱 정책에 따라)
+                        isAuthenticated = true; 
+                      }
+                    }
+
+                    if (!isAuthenticated) return;
+                    if (!mounted) return;
+
                     if (matchedGifticons.length == 1) {
                       context.push('/wallet/detail', extra: matchedGifticons.first);
                     } else {

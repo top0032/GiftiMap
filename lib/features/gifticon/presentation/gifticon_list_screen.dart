@@ -7,6 +7,15 @@ import '../../../core/services/security_service.dart';
 import 'providers/gifticon_provider.dart';
 import '../domain/models/gifticon_model.dart';
 
+enum GifticonSortOption {
+  expiryAsc('유효기간 임박순'),
+  recentDesc('최근 등록순'),
+  brandAsc('브랜드 이름순');
+
+  final String label;
+  const GifticonSortOption(this.label);
+}
+
 class GifticonListScreen extends ConsumerStatefulWidget {
   const GifticonListScreen({super.key});
 
@@ -17,6 +26,7 @@ class GifticonListScreen extends ConsumerStatefulWidget {
 class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   bool _isUnlocked = false; // 보관함 잠금 상태 관리
+  GifticonSortOption _currentSortOption = GifticonSortOption.expiryAsc;
 
   @override
   void initState() {
@@ -35,8 +45,18 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
   }
 
   Future<void> _authenticate() async {
+    final isSecurityOn = ref.read(securityToggleProvider);
+    if (!isSecurityOn) {
+      if (mounted) {
+        setState(() {
+          _isUnlocked = true;
+        });
+      }
+      return;
+    }
+
     final success = await SecurityService().authenticate();
-    if (success) {
+    if (success && mounted) {
       setState(() {
         _isUnlocked = true;
       });
@@ -117,18 +137,46 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
                 
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
-                  child: TabBar(
-                    controller: _tabController,
-                    dividerColor: Colors.transparent,
-                    indicatorColor: AppTheme.primaryTeal,
-                    indicatorWeight: 3,
-                    labelColor: AppTheme.primaryTeal,
-                    unselectedLabelColor: Colors.grey,
-                    labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                    unselectedLabelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                    tabs: const [
-                      Tab(text: '사용 가능'),
-                      Tab(text: '사용 완료'),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TabBar(
+                          controller: _tabController,
+                          dividerColor: Colors.transparent,
+                          indicatorColor: AppTheme.primaryTeal,
+                          indicatorWeight: 3,
+                          labelColor: AppTheme.primaryTeal,
+                          unselectedLabelColor: Colors.grey,
+                          labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          unselectedLabelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                          tabs: const [
+                            Tab(text: '사용 가능'),
+                            Tab(text: '사용 완료'),
+                          ],
+                        ),
+                      ),
+                      PopupMenuButton<GifticonSortOption>(
+                        icon: const Icon(Icons.sort_rounded, color: AppTheme.secondaryNavy),
+                        tooltip: '정렬',
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        onSelected: (option) {
+                          setState(() {
+                            _currentSortOption = option;
+                          });
+                        },
+                        itemBuilder: (context) => GifticonSortOption.values.map((option) {
+                          return PopupMenuItem(
+                            value: option,
+                            child: Text(
+                              option.label,
+                              style: TextStyle(
+                                fontWeight: _currentSortOption == option ? FontWeight.bold : FontWeight.normal,
+                                color: _currentSortOption == option ? AppTheme.primaryTeal : AppTheme.secondaryNavy,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
                     ],
                   ),
                 ),
@@ -170,6 +218,9 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
                       final availableGifticons = gifticons.where((g) => g.isUsed != true).toList();
                       final usedGifticons = gifticons.where((g) => g.isUsed == true).toList();
                       
+                      _sortGifticons(availableGifticons, _currentSortOption);
+                      _sortGifticons(usedGifticons, _currentSortOption);
+                      
                       return TabBarView(
                         controller: _tabController,
                         children: [
@@ -180,19 +231,22 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
                     },
                   ),
                 ),
-                const SizedBox(height: 100),
               ],
             )
           : _buildLockedUI(), // 미인증 시 잠금 화면 표시
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () {
-          context.push('/wallet/add-manual');
-        },
-        backgroundColor: AppTheme.primaryTeal,
-        elevation: 4,
-        icon: const Icon(Icons.add_rounded, color: Colors.white),
-        label: const Text('기프티콘 등록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+      floatingActionButton: SizedBox(
+        height: 44,
+        child: FloatingActionButton.extended(
+          onPressed: () {
+            context.push('/wallet/add-manual');
+          },
+          backgroundColor: AppTheme.primaryTeal,
+          elevation: 4,
+          extendedPadding: const EdgeInsets.symmetric(horizontal: 16),
+          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
+          label: const Text('기프티콘 등록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
@@ -248,6 +302,24 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
     );
   }
 
+  void _sortGifticons(List<GifticonModel> list, GifticonSortOption option) {
+    list.sort((a, b) {
+      switch (option) {
+        case GifticonSortOption.expiryAsc:
+          int getSortValue(GifticonModel g) {
+            if (g.remainingDays == -999) return 99999; // 기한 없음은 맨 뒤로
+            if (g.remainingDays < 0) return 10000 - g.remainingDays; // 만료된 것은 남은 기간이 0 이상인 것들 뒤에 배치 (최근 만료된 것부터)
+            return g.remainingDays;
+          }
+          return getSortValue(a).compareTo(getSortValue(b));
+        case GifticonSortOption.recentDesc:
+          return b.createdAt.compareTo(a.createdAt);
+        case GifticonSortOption.brandAsc:
+          return a.brandName.compareTo(b.brandName);
+      }
+    });
+  }
+
   Widget _buildGifticonList(List<GifticonModel> gifticons, BuildContext context, {bool isArchive = false}) {
     if (gifticons.isEmpty) {
       return Center(
@@ -259,7 +331,7 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
     }
 
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 80),
       itemCount: gifticons.length,
       separatorBuilder: (context, index) => const SizedBox(height: 16),
       itemBuilder: (context, index) {
