@@ -85,16 +85,10 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> _initGeofencing() async {
-    // 백그라운드 위치 권한 상태 확인 (이미 main에서 초기화됨)
+    // 백그라운드 위치 권한 상태 확인 (이미 하단 배너에서 안내하므로 스낵바는 제거)
     final status = await Permission.locationAlways.status;
     if (!status.isGranted && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text('알림을 받으려면 위치 권한을 "항상 허용"으로 설정해주세요.'),
-          duration: const Duration(seconds: 5),
-          action: SnackBarAction(label: '설정', onPressed: openAppSettings),
-        ),
-      );
+      // 스낵바 대신 하단 배너가 이미 처리 중
     }
   }
 
