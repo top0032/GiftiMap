@@ -12,6 +12,7 @@ import '../data/services/geofence_notification_service.dart';
 import '../domain/models/store_model.dart';
 import '../../gifticon/presentation/providers/gifticon_provider.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
+import '../../settings/presentation/providers/settings_provider.dart';
 import '../../../core/services/security_service.dart';
 
 class MapHomeScreen extends ConsumerStatefulWidget {
@@ -140,7 +141,12 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     }).toList();
 
     filteredStores.sort((a, b) => a.distance.compareTo(b.distance));
-    await GeofenceNotificationService().setupGeofences(filteredStores);
+    
+    // 설정에서 지오펜싱 반경 가져오기
+    final settings = ref.read(settingsControllerProvider).value;
+    final radius = settings?.geofenceRadius ?? 200.0;
+    
+    await GeofenceNotificationService().setupGeofences(filteredStores, radius: radius);
 
     if (mounted) {
       setState(() {
