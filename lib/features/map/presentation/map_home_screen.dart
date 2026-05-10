@@ -9,6 +9,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../../../core/theme/theme.dart';
 import '../data/services/kakao_local_api_service.dart';
 import '../data/services/geofence_notification_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import '../domain/models/store_model.dart';
 import '../../gifticon/presentation/providers/gifticon_provider.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
@@ -22,9 +23,11 @@ class MapHomeScreen extends ConsumerStatefulWidget {
   ConsumerState<MapHomeScreen> createState() => _MapHomeScreenState();
 }
 
-class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
+class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
+    with WidgetsBindingObserver {
   KakaoMapController? _mapController;
-  final DraggableScrollableController _sheetController = DraggableScrollableController();
+  final DraggableScrollableController _sheetController =
+      DraggableScrollableController();
   Position? _currentPosition;
   bool _isLoading = true;
   bool _isSearchingStores = false;
@@ -33,17 +36,52 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
   List<StoreModel> _nearbyStores = [];
   final KakaoLocalApiService _apiService = KakaoLocalApiService();
 
+  bool _showNotice = false;
+  String _noticeText = '';
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this); // 옵저버 등록
     _determinePosition();
     _initGeofencing();
+
+    // 최초 실행 시 권한 및 최적화 체크
+    _checkPermissionsStatus();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this); // 옵저버 해제
     _sheetController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // 설정 화면에서 돌아왔을 때(Resumed) 권한 다시 체크
+    if (state == AppLifecycleState.resumed) {
+      _checkPermissionsStatus();
+    }
+  }
+
+  Future<void> _checkPermissionsStatus() async {
+    final locationStatus = await Permission.locationAlways.status;
+    final batteryIgnored =
+        await FlutterForegroundTask.isIgnoringBatteryOptimizations;
+
+    if (!locationStatus.isGranted || !batteryIgnored) {
+      if (mounted) {
+        setState(() {
+          _showNotice = true;
+          _noticeText = "📍위치 '항상 허용' | 🔋배터리 '제한 없음' 설정 시 알림을 받을 수 있어요 (클릭)";
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() => _showNotice = false);
+      }
+    }
   }
 
   Future<void> _initGeofencing() async {
@@ -137,16 +175,21 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
     }
 
     final filteredStores = allStores.where((store) {
-      return gifticons.any((g) => g.brandName == store.matchedBrand && g.isUsed != true);
+      return gifticons.any(
+        (g) => g.brandName == store.matchedBrand && g.isUsed != true,
+      );
     }).toList();
 
     filteredStores.sort((a, b) => a.distance.compareTo(b.distance));
-    
+
     // 설정에서 지오펜싱 반경 가져오기
     final settings = ref.read(settingsControllerProvider).value;
     final radius = settings?.geofenceRadius ?? 200.0;
-    
-    await GeofenceNotificationService().setupGeofences(filteredStores, radius: radius);
+
+    await GeofenceNotificationService().setupGeofences(
+      filteredStores,
+      radius: radius,
+    );
 
     if (mounted) {
       setState(() {
@@ -171,8 +214,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
       // 2. 패널을 최소 높이로 축소 (지도를 가리지 않게)
       if (_sheetController.isAttached) {
         await _sheetController.animateTo(
-          0.11, 
-          duration: const Duration(milliseconds: 300), 
+          0.11,
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       }
@@ -208,15 +251,15 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
       // 검색된 주변 매장 마커
       final gifticons = ref.read(gifticonListProvider).value ?? [];
       final Set<String> existingIds = {'my_location'};
-      
+
       for (var store in _nearbyStores) {
         if (existingIds.contains(store.id)) continue;
-        
+
         // 특정 매장이 선택된 경우, 그 매장이 아니면 무시
         if (_selectedStoreId != null && store.id != _selectedStoreId) {
           continue;
         }
-        
+
         // 특정 매장이 선택되지 않았고, 발견(showStores) 상태도 아니면 무시
         if (_selectedStoreId == null && !_showStores) {
           continue;
@@ -227,26 +270,26 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
         final safePlaceName = store.placeName
             .replaceAll("'", "\\'")
             .replaceAll('"', '&quot;');
-            
+
         final matchedCount = gifticons
             .where((g) => g.brandName == store.matchedBrand && g.isUsed != true)
             .length;
-            
-        final infoText = matchedCount > 0 
+
+        final infoText = matchedCount > 0
             ? '$safePlaceName ($matchedCount개)'
             : safePlaceName;
 
-        // 선택된 매장일 경우 파란색(기본), 아니면 별모양? 사용자가 '딱 그 매장만' 나오게 해달라고 했으므로 
+        // 선택된 매장일 경우 파란색(기본), 아니면 별모양? 사용자가 '딱 그 매장만' 나오게 해달라고 했으므로
         // 굳이 별 모양이 필요 없고 그냥 마커만 보여주면 됨.
         mapMarkers.add(
           Marker(
             markerId: store.id,
             latLng: LatLng(store.latitude, store.longitude),
-            infoWindowContent: 
-              '<div style="padding:10px; min-width:150px; text-align:center;">'
-              '<div style="font-weight:bold; font-size:14px; margin-bottom:4px; color:#1A237E;">$infoText</div>'
-              '<div style="font-size:11px; color:#666;">기프티콘 사용 가능 매장</div>'
-              '</div>',
+            infoWindowContent:
+                '<div style="padding:10px; min-width:150px; text-align:center;">'
+                '<div style="font-weight:bold; font-size:14px; margin-bottom:4px; color:#1A237E;">$infoText</div>'
+                '<div style="font-size:11px; color:#666;">기프티콘 사용 가능 매장</div>'
+                '</div>',
           ),
         );
       }
@@ -398,7 +441,33 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen> {
               );
             },
           ),
+          // 하단 안내 배너 (설정이 필요할 때만 노출)
+          if (_showNotice) _buildBottomNotice(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBottomNotice() {
+    return Positioned(
+      bottom: 85, // 지도를 최대한 가리지 않게 하단으로 조정
+      left: 0,
+      right: 0,
+      child: GestureDetector(
+        onTap: () async => await openAppSettings(),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 6),
+          color: Colors.black.withOpacity(0.5), // 심플한 반투명 회색/검정 배경
+          child: Text(
+            _noticeText.replaceAll('\n', ' '), // 한 줄로 표시
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w400,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -424,7 +493,10 @@ class _RadarBadge extends StatelessWidget {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
-        padding: EdgeInsets.symmetric(horizontal: isExpanded ? 16 : 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: isExpanded ? 16 : 12,
+          vertical: 10,
+        ),
         decoration: BoxDecoration(
           color: AppTheme.surfaceWhite.withOpacity(0.9),
           borderRadius: BorderRadius.circular(20),
@@ -493,18 +565,25 @@ class _ProfileButton extends ConsumerWidget {
                 CircleAvatar(
                   radius: 40,
                   backgroundColor: AppTheme.primaryTeal.withOpacity(0.1),
-                  backgroundImage: user?.photoURL != null 
-                      ? NetworkImage(user!.photoURL!) 
+                  backgroundImage: user?.photoURL != null
+                      ? NetworkImage(user!.photoURL!)
                       : null,
                   child: user?.photoURL == null
-                      ? const Icon(Icons.person, size: 40, color: AppTheme.primaryTeal)
+                      ? const Icon(
+                          Icons.person,
+                          size: 40,
+                          color: AppTheme.primaryTeal,
+                        )
                       : null,
                 ),
                 const SizedBox(height: 16),
                 // 사용자 이름 (Consumer를 사용하여 팝업 내부에서도 실시간 업데이트)
                 Consumer(
                   builder: (context, ref, child) {
-                    final currentName = ref.watch(displayNameProvider) ?? user?.displayName ?? '사용자';
+                    final currentName =
+                        ref.watch(displayNameProvider) ??
+                        user?.displayName ??
+                        '사용자';
                     print('[UI_CHECK] Inside Dialog Name: $currentName');
                     return Text(
                       currentName,
@@ -519,20 +598,26 @@ class _ProfileButton extends ConsumerWidget {
                 const SizedBox(height: 4),
                 // 사용자 이메일
                 Text(
-                  user?.email ?? (user?.isAnonymous == true ? '익명 계정 (카카오 연동됨)' : '이메일 정보 없음'),
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.grey.shade600,
-                  ),
+                  user?.email ??
+                      (user?.isAnonymous == true
+                          ? '익명 계정 (카카오 연동됨)'
+                          : '이메일 정보 없음'),
+                  style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
                 ),
                 const SizedBox(height: 16),
                 const Divider(),
                 // 앱 나가기 버튼
                 ListTile(
-                  leading: const Icon(Icons.exit_to_app_rounded, color: AppTheme.secondaryNavy),
+                  leading: const Icon(
+                    Icons.exit_to_app_rounded,
+                    color: AppTheme.secondaryNavy,
+                  ),
                   title: const Text(
                     '앱 나가기',
-                    style: TextStyle(color: AppTheme.secondaryNavy, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: AppTheme.secondaryNavy,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   onTap: () {
                     SystemNavigator.pop();
@@ -543,7 +628,10 @@ class _ProfileButton extends ConsumerWidget {
                   leading: const Icon(Icons.logout, color: Colors.redAccent),
                   title: const Text(
                     '로그아웃',
-                    style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold),
+                    style: TextStyle(
+                      color: Colors.redAccent,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   onTap: () async {
                     Navigator.pop(context);
@@ -555,7 +643,10 @@ class _ProfileButton extends ConsumerWidget {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(context),
-                child: const Text('닫기', style: TextStyle(color: AppTheme.secondaryNavy)),
+                child: const Text(
+                  '닫기',
+                  style: TextStyle(color: AppTheme.secondaryNavy),
+                ),
               ),
             ],
           ),
@@ -564,8 +655,8 @@ class _ProfileButton extends ConsumerWidget {
       child: CircleAvatar(
         backgroundColor: AppTheme.surfaceWhite,
         radius: 22,
-        backgroundImage: user?.photoURL != null 
-            ? NetworkImage(user!.photoURL!) 
+        backgroundImage: user?.photoURL != null
+            ? NetworkImage(user!.photoURL!)
             : null,
         child: user?.photoURL == null
             ? const Icon(Icons.person_rounded, color: AppTheme.secondaryNavy)
@@ -606,7 +697,9 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
     final Set<String> availableBrands = {};
     if (!widget.isSearching && widget.stores.isNotEmpty) {
       for (var store in widget.stores) {
-        final matched = gifticons.where((g) => g.brandName == store.matchedBrand && g.isUsed != true);
+        final matched = gifticons.where(
+          (g) => g.brandName == store.matchedBrand && g.isUsed != true,
+        );
         if (matched.isNotEmpty) {
           availableBrands.add(store.matchedBrand);
         }
@@ -614,9 +707,11 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
     }
 
     // 선택된 브랜드에 따라 매장 필터링
-    final displayedStores = _selectedFilterBrand == null 
-        ? widget.stores 
-        : widget.stores.where((s) => s.matchedBrand == _selectedFilterBrand).toList();
+    final displayedStores = _selectedFilterBrand == null
+        ? widget.stores
+        : widget.stores
+              .where((s) => s.matchedBrand == _selectedFilterBrand)
+              .toList();
 
     return ListView(
       controller: widget.scrollController,
@@ -670,7 +765,10 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                 Padding(
                   padding: const EdgeInsets.only(right: 8.0),
                   child: ChoiceChip(
-                    label: const Text('전체', style: TextStyle(fontWeight: FontWeight.bold)),
+                    label: const Text(
+                      '전체',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
                     selected: _selectedFilterBrand == null,
                     onSelected: (selected) {
                       if (selected) {
@@ -679,33 +777,48 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                     },
                     selectedColor: AppTheme.primaryTeal,
                     labelStyle: TextStyle(
-                      color: _selectedFilterBrand == null ? Colors.white : AppTheme.secondaryNavy,
+                      color: _selectedFilterBrand == null
+                          ? Colors.white
+                          : AppTheme.secondaryNavy,
                     ),
                     backgroundColor: Colors.grey.shade100,
                     showCheckmark: false,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(20),
+                      side: const BorderSide(color: Colors.transparent),
+                    ),
                   ),
                 ),
                 // 각 브랜드별 버튼
-                ...availableBrands.map((brand) => Padding(
-                  padding: const EdgeInsets.only(right: 8.0),
-                  child: ChoiceChip(
-                    label: Text(brand, style: const TextStyle(fontWeight: FontWeight.bold)),
-                    selected: _selectedFilterBrand == brand,
-                    onSelected: (selected) {
-                      setState(() {
-                        _selectedFilterBrand = selected ? brand : null;
-                      });
-                    },
-                    selectedColor: AppTheme.primaryTeal,
-                    labelStyle: TextStyle(
-                      color: _selectedFilterBrand == brand ? Colors.white : AppTheme.secondaryNavy,
+                ...availableBrands.map(
+                  (brand) => Padding(
+                    padding: const EdgeInsets.only(right: 8.0),
+                    child: ChoiceChip(
+                      label: Text(
+                        brand,
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      selected: _selectedFilterBrand == brand,
+                      onSelected: (selected) {
+                        setState(() {
+                          _selectedFilterBrand = selected ? brand : null;
+                        });
+                      },
+                      selectedColor: AppTheme.primaryTeal,
+                      labelStyle: TextStyle(
+                        color: _selectedFilterBrand == brand
+                            ? Colors.white
+                            : AppTheme.secondaryNavy,
+                      ),
+                      backgroundColor: Colors.grey.shade100,
+                      showCheckmark: false,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                        side: const BorderSide(color: Colors.transparent),
+                      ),
                     ),
-                    backgroundColor: Colors.grey.shade100,
-                    showCheckmark: false,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Colors.transparent)),
                   ),
-                )),
+                ),
               ],
             ),
           ),
@@ -725,16 +838,19 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
           ...displayedStores.map((store) {
             // 해당 매장 브랜드와 일치하는 내 '사용 가능한' 기프티콘 목록 필터링
             final matchedGifticons = gifticons
-                .where((g) => g.brandName == store.matchedBrand && g.isUsed != true)
+                .where(
+                  (g) => g.brandName == store.matchedBrand && g.isUsed != true,
+                )
                 .toList();
-            
+
             String badgeText;
             if (matchedGifticons.isEmpty) {
               badgeText = '사용 가능';
             } else if (matchedGifticons.length == 1) {
               badgeText = matchedGifticons.first.productName;
             } else {
-              badgeText = '${matchedGifticons.first.productName} 외 ${matchedGifticons.length - 1}개';
+              badgeText =
+                  '${matchedGifticons.first.productName} 외 ${matchedGifticons.length - 1}개';
             }
 
             return Padding(
@@ -746,22 +862,27 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                 onLocationTap: () => widget.onStoreTap?.call(store),
                 onGifticonTap: () async {
                   if (matchedGifticons.isNotEmpty) {
-                    final isSecurityOn = widget.ref.read(securityToggleProvider);
+                    final isSecurityOn = widget.ref.read(
+                      securityToggleProvider,
+                    );
                     bool isAuthenticated = false;
 
                     if (!isSecurityOn) {
                       isAuthenticated = true;
                     } else {
-                      final securityService = widget.ref.read(securityServiceProvider);
-                      final isAvailable = await securityService.isBiometricAvailable();
-                      
+                      final securityService = widget.ref.read(
+                        securityServiceProvider,
+                      );
+                      final isAvailable = await securityService
+                          .isBiometricAvailable();
+
                       if (isAvailable) {
                         isAuthenticated = await securityService.authenticate(
                           reason: '기프티콘을 확인하려면 인증이 필요합니다.',
                         );
                       } else {
                         // 생체 인식을 사용할 수 없는 기기인 경우 통과 (또는 기존 앱 정책에 따라)
-                        isAuthenticated = true; 
+                        isAuthenticated = true;
                       }
                     }
 
@@ -769,29 +890,54 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                     if (!mounted) return;
 
                     if (matchedGifticons.length == 1) {
-                      context.push('/wallet/detail', extra: matchedGifticons.first);
+                      context.push(
+                        '/wallet/detail',
+                        extra: matchedGifticons.first,
+                      );
                     } else {
                       showModalBottomSheet(
                         context: context,
-                        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
                         builder: (context) => SafeArea(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
                               Padding(
                                 padding: const EdgeInsets.all(16.0),
-                                child: Text('${store.placeName} 기프티콘 선택', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                                child: Text(
+                                  '${store.placeName} 기프티콘 선택',
+                                  style: const TextStyle(
+                                    fontSize: 16,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
                               ),
-                              ...matchedGifticons.map((g) => ListTile(
-                                leading: const Icon(Icons.card_giftcard_rounded, color: AppTheme.primaryTeal),
-                                title: Text(g.productName, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text('유효기간: ${g.expirationDate}'),
-                                trailing: const Icon(Icons.chevron_right_rounded),
-                                onTap: () {
-                                  Navigator.pop(context);
-                                  context.push('/wallet/detail', extra: g);
-                                },
-                              )),
+                              ...matchedGifticons.map(
+                                (g) => ListTile(
+                                  leading: const Icon(
+                                    Icons.card_giftcard_rounded,
+                                    color: AppTheme.primaryTeal,
+                                  ),
+                                  title: Text(
+                                    g.productName,
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                  subtitle: Text('유효기간: ${g.expirationDate}'),
+                                  trailing: const Icon(
+                                    Icons.chevron_right_rounded,
+                                  ),
+                                  onTap: () {
+                                    Navigator.pop(context);
+                                    context.push('/wallet/detail', extra: g);
+                                  },
+                                ),
+                              ),
                               const SizedBox(height: 16),
                             ],
                           ),
@@ -858,12 +1004,22 @@ class _StoreListItem extends StatelessWidget {
                       onTap: onLocationTap,
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           border: Border.all(color: Colors.grey.shade300),
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text('위치보기', style: TextStyle(fontSize: 12, color: AppTheme.secondaryNavy, fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          '위치보기',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: AppTheme.secondaryNavy,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                     const SizedBox(width: 6),
@@ -871,12 +1027,22 @@ class _StoreListItem extends StatelessWidget {
                       onTap: onGifticonTap,
                       borderRadius: BorderRadius.circular(6),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
                           color: AppTheme.primaryTeal,
                           borderRadius: BorderRadius.circular(6),
                         ),
-                        child: const Text('기프티콘 보기', style: TextStyle(fontSize: 12, color: Colors.white, fontWeight: FontWeight.bold)),
+                        child: const Text(
+                          '기프티콘 보기',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ),
                     ),
                   ],
@@ -895,7 +1061,10 @@ class _StoreListItem extends StatelessWidget {
                     const SizedBox(width: 8),
                     Flexible(
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 2,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(4),
