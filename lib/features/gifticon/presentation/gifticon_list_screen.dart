@@ -38,10 +38,16 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
       }
     });
     
-    // 화면 진입 시 즉시 보안 인증 실행
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _authenticate();
-    });
+    // 초기 잠금 상태 설정: 보안 인증이 꺼져있으면 처음부터 잠금 해제 상태로 시작
+    final isSecurityOn = ref.read(securityToggleProvider);
+    _isUnlocked = !isSecurityOn;
+    
+    // 보안 인증이 켜져 있는 경우에만 인증 프로세스 실행
+    if (isSecurityOn) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _authenticate();
+      });
+    }
   }
 
   Future<void> _authenticate() async {
@@ -55,7 +61,7 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
       return;
     }
 
-    final success = await SecurityService().authenticate();
+    final success = await ref.read(securityServiceProvider).authenticate();
     if (success && mounted) {
       setState(() {
         _isUnlocked = true;

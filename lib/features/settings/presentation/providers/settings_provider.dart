@@ -85,6 +85,20 @@ class SettingsController extends _$SettingsController {
     });
   }
 
+  Future<void> updateGeofenceRadius(double radius) async {
+    final repo = ref.read(settingsRepositoryProvider);
+    final currentSettings = state.value ?? NotificationSettings.defaultSettings();
+    final newSettings = currentSettings.copyWith(geofenceRadius: radius);
+    
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await repo.saveNotificationSettings(newSettings);
+      // 지오펜싱 반경 변경 시 MapHomeScreen에서 setupGeofences를 다시 호출하도록 유도하거나, 
+      // 여기서 직접 서비스 트리거가 필요할 수 있으나 UI에서 반응형으로 처리하도록 설계함
+      return newSettings;
+    });
+  }
+
   /// 모든 기프티콘의 알림을 취소하고 다시 예약합니다.
   Future<void> _rescheduleAllNotifications() async {
     final gifticonRepo = ref.read(gifticonRepositoryProvider);

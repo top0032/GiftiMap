@@ -34,6 +34,8 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 _buildSecurityToggleSection(context, ref, isSecurityOn),
+                Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
+                _buildGeofenceRadiusSection(context, ref, settings.geofenceRadius),
                 Divider(height: 8, thickness: 8, color: Colors.grey.shade100),
                 _buildToggleSection(context, ref, settings.isEnabled),
                 if (settings.isEnabled) ...[
@@ -71,7 +73,83 @@ class SettingsScreen extends ConsumerWidget {
           Switch.adaptive(
             value: isSecurityOn,
             activeColor: AppTheme.primaryTeal,
-            onChanged: (value) => ref.read(securityToggleProvider.notifier).toggle(value),
+            onChanged: (value) async {
+              final securityService = ref.read(securityServiceProvider);
+              final isAvailable = await securityService.isBiometricAvailable();
+              
+              if (isAvailable) {
+                final authenticated = await securityService.authenticate(
+                  reason: value ? '보안 인증을 활성화하기 위해 인증이 필요합니다.' : '보안 인증을 비활성화하기 위해 인증이 필요합니다.',
+                );
+                
+                if (authenticated) {
+                  ref.read(securityToggleProvider.notifier).toggle(value);
+                }
+              } else {
+                // 생체 인식을 지원하지 않는 경우 바로 변경 (또는 경고 메시지)
+                ref.read(securityToggleProvider.notifier).toggle(value);
+              }
+            },
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGeofenceRadiusSection(BuildContext context, WidgetRef ref, double radius) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '지오펜싱 알림 거리',
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
+              ),
+              Text(
+                '${radius.toInt()}m',
+                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.primaryTeal),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            '설정한 거리 안에 매장이 있으면 알림을 보냅니다.',
+            style: TextStyle(fontSize: 13, color: Colors.grey),
+          ),
+          const SizedBox(height: 8),
+          SliderTheme(
+            data: SliderTheme.of(context).copyWith(
+              activeTrackColor: AppTheme.primaryTeal,
+              inactiveTrackColor: AppTheme.primaryTeal.withOpacity(0.1),
+              thumbColor: AppTheme.primaryTeal,
+              overlayColor: AppTheme.primaryTeal.withOpacity(0.2),
+              valueIndicatorColor: AppTheme.primaryTeal,
+              valueIndicatorTextStyle: const TextStyle(color: Colors.white),
+            ),
+            child: Slider(
+              value: radius,
+              min: 100,
+              max: 300,
+              divisions: 4, // 100, 150, 200, 250, 300
+              label: '${radius.toInt()}m',
+              onChanged: (value) {
+                ref.read(settingsControllerProvider.notifier).updateGeofenceRadius(value);
+              },
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text('100m', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                Text('300m', style: TextStyle(fontSize: 11, color: Colors.grey)),
+              ],
+            ),
           ),
         ],
       ),

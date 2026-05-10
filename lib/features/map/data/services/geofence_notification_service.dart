@@ -98,7 +98,7 @@ class GeofenceNotificationService {
     );
   }
 
-  Future<void> setupGeofences(List<StoreModel> stores) async {
+  Future<void> setupGeofences(List<StoreModel> stores, {double radius = 200.0}) async {
     // Windows에서는 지오펜싱 기능을 지원하지 않으므로 종료
     if (!kIsWeb && Platform.isWindows) return;
 
@@ -119,7 +119,7 @@ class GeofenceNotificationService {
         id: store.id,
         data: store.placeName, // 매장명을 data 필드에 저장하여 알림에 활용
         center: LatLng(store.latitude, store.longitude),
-        radius: 200.0, // 반경 200m로 확대 (인식률 향상)
+        radius: radius, // 설정된 반경 사용 (기본 200m)
       );
       regions.add(region);
     }
@@ -137,7 +137,7 @@ class GeofenceNotificationService {
           store.latitude, store.longitude
         );
         
-        if (distance <= 200.0) { 
+        if (distance <= radius) { 
            final storeId = store.id;
            final now = DateTime.now();
 
@@ -147,7 +147,7 @@ class GeofenceNotificationService {
              if (now.difference(lastTime) < _notificationCooldown) continue;
            }
 
-           print('User is already inside ${store.placeName} (Distance: ${distance.toInt()}m)');
+           print('User is already inside ${store.placeName} (Distance: ${distance.toInt()}m, Radius: ${radius.toInt()}m)');
            _lastNotificationTimes[storeId] = now;
            await showNotification(
              store.id.hashCode,
