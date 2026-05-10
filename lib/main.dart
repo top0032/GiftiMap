@@ -13,6 +13,9 @@ import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'features/gifticon/data/services/expiration_notification_service.dart';
+import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'features/map/data/services/geofence_task_handler.dart';
+import 'core/services/background_callback.dart';
 
 void main() async {
   print('--- App Starting... ---');
@@ -99,20 +102,22 @@ class MyApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final router = ref.watch(routerProvider);
 
-    return MaterialApp.router(
-      title: 'GiftiMap',
-      theme: AppTheme.lightTheme,
-      routerConfig: router,
-      debugShowCheckedModeBanner: false,
-      localizationsDelegates: const [
-        GlobalMaterialLocalizations.delegate,
-        GlobalWidgetsLocalizations.delegate,
-        GlobalCupertinoLocalizations.delegate,
-      ],
-      supportedLocales: const [
-        Locale('ko', 'KR'),
-      ],
-      locale: const Locale('ko', 'KR'),
+    return WithForegroundTask(
+      child: MaterialApp.router(
+        title: 'GiftiMap',
+        theme: AppTheme.lightTheme,
+        routerConfig: router,
+        debugShowCheckedModeBanner: false,
+        localizationsDelegates: const [
+          GlobalMaterialLocalizations.delegate,
+          GlobalWidgetsLocalizations.delegate,
+          GlobalCupertinoLocalizations.delegate,
+        ],
+        supportedLocales: const [
+          Locale('ko', 'KR'),
+        ],
+        locale: const Locale('ko', 'KR'),
+      ),
     );
   }
 }

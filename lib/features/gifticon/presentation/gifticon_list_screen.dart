@@ -218,7 +218,7 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
                     ),
                     data: (gifticons) {
                       if (gifticons.isEmpty) {
-                        return const Center(child: Text('보관함이 비어있습니다.\n하단의 + 버튼을 눌러 기프티콘을 추가해보세요!', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
+                        return const Center(child: Text('보관함이 비어있습니다.', textAlign: TextAlign.center, style: TextStyle(color: Colors.grey)));
                       }
                       
                       final availableGifticons = gifticons.where((g) => g.isUsed != true).toList();
@@ -241,19 +241,16 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
             )
           : _buildLockedUI(), // 미인증 시 잠금 화면 표시
       ),
-      floatingActionButton: SizedBox(
-        height: 44,
-        child: FloatingActionButton.extended(
-          onPressed: () {
-            context.push('/wallet/add-manual');
-          },
-          backgroundColor: AppTheme.primaryTeal,
-          elevation: 4,
-          extendedPadding: const EdgeInsets.symmetric(horizontal: 16),
-          icon: const Icon(Icons.add_rounded, color: Colors.white, size: 20),
-          label: const Text('기프티콘 등록', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14)),
-        ),
-      ),
+      floatingActionButton: _isUnlocked 
+          ? FloatingActionButton.extended(
+              onPressed: () => context.push('/register'),
+              backgroundColor: AppTheme.primaryTeal,
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.add_rounded),
+              label: const Text('기프티콘 등록'),
+              elevation: 4,
+            )
+          : null,
       floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
