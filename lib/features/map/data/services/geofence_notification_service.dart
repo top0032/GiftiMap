@@ -89,8 +89,8 @@ class GeofenceNotificationService {
         channelId: 'giftimap_foreground_service',
         channelName: 'GiftiMap Background Service',
         channelDescription: '지오펜싱 및 위치 추적을 위한 서비스입니다.',
-        channelImportance: NotificationChannelImportance.LOW,
-        priority: NotificationPriority.LOW,
+        channelImportance: NotificationChannelImportance.DEFAULT,
+        priority: NotificationPriority.DEFAULT,
         iconData: const NotificationIconData(
           resType: ResourceType.mipmap,
           resPrefix: ResourcePrefix.ic,

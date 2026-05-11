@@ -15,6 +15,7 @@ import '../../gifticon/presentation/providers/gifticon_provider.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
 import '../../settings/presentation/providers/settings_provider.dart';
 import '../../../core/services/security_service.dart';
+import '../../../core/utils/map_launcher.dart';
 
 class MapHomeScreen extends ConsumerStatefulWidget {
   const MapHomeScreen({super.key});
@@ -35,6 +36,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   String? _selectedStoreId;
   List<StoreModel> _nearbyStores = [];
   final KakaoLocalApiService _apiService = KakaoLocalApiService();
+  String? _selectedFilterBrand; // 브랜드 필터 상태 추가
 
   bool _showNotice = false;
   String _noticeText = '';
@@ -168,10 +170,20 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
       allStores.addAll(stores);
     }
 
+    // 매장이 아닌 장소(주차장, ATM, 물류센터 등) 제외 키워드
+    final excludeKeywords = ['주차장', 'ATM', '무인택배', '물류', '본사', '사무소', '센터', '창고'];
+
     final filteredStores = allStores.where((store) {
-      return gifticons.any(
+      // 1. 제외 키워드가 포함되어 있는지 확인
+      final isNotStore =
+          excludeKeywords.any((keyword) => store.placeName.contains(keyword));
+
+      // 2. 해당 브랜드의 사용 가능한 기프티콘이 있는지 확인
+      final hasGifticon = gifticons.any(
         (g) => g.brandName == store.matchedBrand && g.isUsed != true,
       );
+
+      return !isNotStore && hasGifticon;
     }).toList();
 
     filteredStores.sort((a, b) => a.distance.compareTo(b.distance));
@@ -249,12 +261,18 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
       for (var store in _nearbyStores) {
         if (existingIds.contains(store.id)) continue;
 
-        // 특정 매장이 선택된 경우, 그 매장이 아니면 무시
+        // 1. 특정 매장이 선택된 경우, 그 매장이 아니면 무시
         if (_selectedStoreId != null && store.id != _selectedStoreId) {
           continue;
         }
 
-        // 특정 매장이 선택되지 않았고, 발견(showStores) 상태도 아니면 무시
+        // 2. 브랜드 필터가 설정된 경우, 해당 브랜드가 아니면 무시
+        if (_selectedFilterBrand != null &&
+            store.matchedBrand != _selectedFilterBrand) {
+          continue;
+        }
+
+        // 3. 특정 매장이 선택되지 않았고, 발견(showStores) 상태도 아니면 무시
         if (_selectedStoreId == null && !_showStores) {
           continue;
         }
@@ -311,9 +329,12 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
                 : KakaoMap(
                     onMapCreated: (controller) => _mapController = controller,
                     onMarkerTap: (markerId, latLng, zoomLevel) {
-                      // 마커 클릭 시 해당 위치로 중심 이동
+                      // 마커 클릭 시 해당 위치로 중심 이동 및 선택 상태 업데이트
                       if (markerId != 'my_location') {
                         _mapController?.setCenter(latLng);
+                        setState(() {
+                          _selectedStoreId = markerId;
+                        });
                       }
                     },
                     center: LatLng(
@@ -356,7 +377,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
           // 3. 내 위치 버튼 (바텀 시트 바로 위에 배치)
           Positioned(
-            bottom: 100, // 스와이프 패널의 최소 높이보다 살짝 위
+            bottom: _selectedStoreId != null ? 180 : 100, // 길찾기 카드가 있을 때 위치 조정
             right: 16,
             child: FloatingActionButton(
               mini: true,
@@ -382,7 +403,10 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
             ),
           ),
 
-          // 4. 스와이프 가능한 주변 가맹점 패널 (네비게이션 바 위에서 시작)
+          // 4. 매장 선택 시 나타나는 빠른 길찾기 카드
+          if (_selectedStoreId != null) _buildQuickRouteOverlay(),
+
+          // 5. 스와이프 가능한 주변 가맹점 패널 (네비게이션 바 위에서 시작)
           DraggableScrollableSheet(
             controller: _sheetController,
             initialChildSize: 0.11, // 최소 높이
@@ -428,6 +452,13 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
                         ref: ref,
                         onStoreTap: _moveToStore,
                         scrollController: scrollController,
+                        selectedFilterBrand: _selectedFilterBrand,
+                        onFilterChanged: (brand) {
+                          setState(() {
+                            _selectedFilterBrand = brand;
+                            _selectedStoreId = null; // 필터 변경 시 개별 매장 선택 해제
+                          });
+                        },
                       ),
                     ),
                   ],
@@ -438,6 +469,105 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
           // 하단 안내 배너 (설정이 필요할 때만 노출)
           if (_showNotice) _buildBottomNotice(),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickRouteOverlay() {
+    final stores =
+        _nearbyStores.where((s) => s.id == _selectedStoreId).toList();
+    if (stores.isEmpty) return const SizedBox.shrink();
+    final selectedStore = stores.first;
+
+    return Positioned(
+      bottom: 95, // 내 위치 버튼 아래, 바텀 시트 위
+      left: 16,
+      right: 16,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: BoxDecoration(
+          color: AppTheme.secondaryNavy.withOpacity(0.95),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 15,
+              offset: const Offset(0, 5),
+            ),
+          ],
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.storefront_rounded,
+                color: AppTheme.primaryTeal,
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    selectedStore.placeName,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const Text(
+                    '이 매장으로 길찾기를 시작할까요?',
+                    style: TextStyle(color: Colors.white70, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            ElevatedButton(
+              onPressed: () => MapLauncher.launchRoute(
+                lat: selectedStore.latitude,
+                lng: selectedStore.longitude,
+                name: selectedStore.placeName,
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.primaryTeal,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
+                minimumSize: const Size(60, 36),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                '길찾기',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+            ),
+            const SizedBox(width: 4),
+            IconButton(
+              onPressed: () => setState(() => _selectedStoreId = null),
+              icon: const Icon(
+                Icons.close_rounded,
+                color: Colors.white60,
+                size: 20,
+              ),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -666,6 +796,8 @@ class _NearbyGifticonPanel extends StatefulWidget {
   final WidgetRef ref;
   final Function(StoreModel)? onStoreTap;
   final ScrollController scrollController;
+  final String? selectedFilterBrand; // 필터 상태 추가
+  final Function(String?)? onFilterChanged; // 필터 변경 콜백 추가
 
   const _NearbyGifticonPanel({
     required this.stores,
@@ -673,6 +805,8 @@ class _NearbyGifticonPanel extends StatefulWidget {
     required this.ref,
     this.onStoreTap,
     required this.scrollController,
+    this.selectedFilterBrand,
+    this.onFilterChanged,
   });
 
   @override
@@ -680,8 +814,6 @@ class _NearbyGifticonPanel extends StatefulWidget {
 }
 
 class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
-  String? _selectedFilterBrand;
-
   @override
   Widget build(BuildContext context) {
     // ref.watch를 사용하여 기프티콘 리스트 변화를 실시간으로 감시
@@ -701,10 +833,10 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
     }
 
     // 선택된 브랜드에 따라 매장 필터링
-    final displayedStores = _selectedFilterBrand == null
+    final displayedStores = widget.selectedFilterBrand == null
         ? widget.stores
         : widget.stores
-              .where((s) => s.matchedBrand == _selectedFilterBrand)
+              .where((s) => s.matchedBrand == widget.selectedFilterBrand)
               .toList();
 
     return ListView(
@@ -763,15 +895,15 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                       '전체',
                       style: TextStyle(fontWeight: FontWeight.bold),
                     ),
-                    selected: _selectedFilterBrand == null,
+                    selected: widget.selectedFilterBrand == null,
                     onSelected: (selected) {
                       if (selected) {
-                        setState(() => _selectedFilterBrand = null);
+                        widget.onFilterChanged?.call(null);
                       }
                     },
                     selectedColor: AppTheme.primaryTeal,
                     labelStyle: TextStyle(
-                      color: _selectedFilterBrand == null
+                      color: widget.selectedFilterBrand == null
                           ? Colors.white
                           : AppTheme.secondaryNavy,
                     ),
@@ -792,15 +924,13 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
                         brand,
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      selected: _selectedFilterBrand == brand,
+                      selected: widget.selectedFilterBrand == brand,
                       onSelected: (selected) {
-                        setState(() {
-                          _selectedFilterBrand = selected ? brand : null;
-                        });
+                        widget.onFilterChanged?.call(selected ? brand : null);
                       },
                       selectedColor: AppTheme.primaryTeal,
                       labelStyle: TextStyle(
-                        color: _selectedFilterBrand == brand
+                        color: widget.selectedFilterBrand == brand
                             ? Colors.white
                             : AppTheme.secondaryNavy,
                       ),
@@ -851,9 +981,15 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
               padding: const EdgeInsets.only(bottom: 8.0),
               child: _StoreListItem(
                 title: store.placeName,
+                brand: store.matchedBrand, // 브랜드명 추가
                 distance: '${store.distance.toInt()}m',
                 badgeText: badgeText,
                 onLocationTap: () => widget.onStoreTap?.call(store),
+                onRouteTap: () => MapLauncher.launchRoute(
+                  lat: store.latitude,
+                  lng: store.longitude,
+                  name: store.placeName,
+                ),
                 onGifticonTap: () async {
                   if (matchedGifticons.isNotEmpty) {
                     final isSecurityOn = widget.ref.read(
@@ -950,128 +1086,187 @@ class _NearbyGifticonPanelState extends State<_NearbyGifticonPanel> {
 
 class _StoreListItem extends StatelessWidget {
   final String title;
+  final String brand; // 브랜드 필드 추가
   final String distance;
   final String badgeText;
   final VoidCallback? onLocationTap;
+  final VoidCallback? onRouteTap;
   final VoidCallback? onGifticonTap;
 
   const _StoreListItem({
     required this.title,
+    required this.brand, // 브랜드 필수 인자 추가
     required this.distance,
     required this.badgeText,
     this.onLocationTap,
+    this.onRouteTap,
     this.onGifticonTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(
         color: AppTheme.backgroundLight,
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.grey.withOpacity(0.05)),
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.storefront_rounded, color: Colors.grey, size: 28),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: AppTheme.primaryTeal.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: const Icon(
+              Icons.storefront_rounded,
+              color: AppTheme.primaryTeal,
+              size: 24,
+            ),
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // 1. 브랜드 및 매장명 (상단에 넓게 배치)
                 Row(
                   children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: AppTheme.secondaryNavy,
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        brand,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         title,
                         style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: AppTheme.secondaryNavy,
                         ),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: onLocationTap,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.grey.shade300),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          '위치보기',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: AppTheme.secondaryNavy,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    InkWell(
-                      onTap: onGifticonTap,
-                      borderRadius: BorderRadius.circular(6),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppTheme.primaryTeal,
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: const Text(
-                          '기프티콘 보기',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ),
                   ],
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 4),
+                // 2. 거리 및 뱃지
                 Row(
                   children: [
                     Text(
                       distance,
                       style: const TextStyle(
                         color: AppTheme.primaryTeal,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
                       ),
                     ),
                     const SizedBox(width: 8),
                     Flexible(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
+                      child: Text(
+                        badgeText,
+                        style: TextStyle(
+                          color: Colors.grey.shade600,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
                         ),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.shade100,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          badgeText,
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                // 3. 버튼들 (별도 행으로 분리하여 가독성 확보)
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: onLocationTap,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.grey.shade300),
+                            borderRadius: BorderRadius.circular(8),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                          child: const Center(
+                            child: Text(
+                              '위치보기',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: AppTheme.secondaryNavy,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InkWell(
+                        onTap: onRouteTap,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.secondaryNavy,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              '길찾기',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InkWell(
+                        onTap: onGifticonTap,
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.primaryTeal,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Center(
+                            child: Text(
+                              '기프티콘',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ),
