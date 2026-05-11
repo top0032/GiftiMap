@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +30,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   KakaoMapController? _mapController;
   final DraggableScrollableController _sheetController =
       DraggableScrollableController();
+  StreamSubscription<Position>? _positionSubscription; // 위치 스트림 구독 추가
   Position? _currentPosition;
   bool _isLoading = true;
   bool _isSearchingStores = false;
@@ -37,6 +39,8 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   List<StoreModel> _nearbyStores = [];
   final KakaoLocalApiService _apiService = KakaoLocalApiService();
   String? _selectedFilterBrand; // 브랜드 필터 상태 추가
+  StoreModel? _selectedStore; // 선택된 매장 정보 추가
+  bool _showQuickRoute = false; // 빠른 길찾기 오버레이 표시 여부
 
   bool _showNotice = false;
   String _noticeText = '';
@@ -47,6 +51,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     WidgetsBinding.instance.addObserver(this); // 옵저버 등록
     _determinePosition();
     _initGeofencing();
+    _startPositionUpdates(); // 실시간 위치 업데이트 시작
 
     // 최초 실행 시 권한 및 최적화 체크
     _checkPermissionsStatus();
@@ -55,6 +60,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this); // 옵저버 해제
+    _positionSubscription?.cancel(); // 위치 구독 해제
     _sheetController.dispose();
     super.dispose();
   }
@@ -87,10 +93,17 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 
   Future<void> _initGeofencing() async {
-    // 백그라운드 위치 권한 상태 확인 (이미 하단 배너에서 안내하므로 스낵바는 제거)
-    final status = await Permission.locationAlways.status;
-    if (!status.isGranted && mounted) {
-      // 스낵바 대신 하단 배너가 이미 처리 중
+    // 1. 알림 권한 요청
+    await Permission.notification.request();
+    
+    // 2. 기본 위치 권한 요청 (앱 사용 중 허용)
+    await Permission.location.request();
+
+    // 3. 서비스 초기화 및 시작 시도
+    await GeofenceNotificationService().initialize();
+    
+    if (_currentPosition != null) {
+      _fetchNearbyStores();
     }
   }
 
@@ -133,6 +146,27 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     }
   }
 
+  /// [추가] 실시간 위치 변화 감지 및 자동 재탐색
+  void _startPositionUpdates() {
+    _positionSubscription = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 50, // 50m 이상 이동 시 이벤트 발생 (시연용 고감도)
+      ),
+    ).listen((Position position) {
+      if (mounted) {
+        setState(() {
+          _currentPosition = position;
+        });
+        
+        // 위치가 바뀌면 주변 매장 새로고침 및 지오펜싱 업데이트
+        _fetchNearbyStores();
+        
+        debugPrint('--- [Foreground] Position Updated: ${position.latitude}, ${position.longitude} ---');
+      }
+    });
+  }
+
   Future<void> _fetchNearbyStores() async {
     // ... 기존 코드와 동일 ...
     if (_currentPosition == null) return;
@@ -171,12 +205,22 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     }
 
     // 매장이 아닌 장소(주차장, ATM, 물류센터 등) 제외 키워드
-    final excludeKeywords = ['주차장', 'ATM', '무인택배', '물류', '본사', '사무소', '센터', '창고'];
+    final excludeKeywords = [
+      '주차장',
+      'ATM',
+      '무인택배',
+      '물류',
+      '본사',
+      '사무소',
+      '센터',
+      '창고',
+    ];
 
     final filteredStores = allStores.where((store) {
       // 1. 제외 키워드가 포함되어 있는지 확인
-      final isNotStore =
-          excludeKeywords.any((keyword) => store.placeName.contains(keyword));
+      final isNotStore = excludeKeywords.any(
+        (keyword) => store.placeName.contains(keyword),
+      );
 
       // 2. 해당 브랜드의 사용 가능한 기프티콘이 있는지 확인
       final hasGifticon = gifticons.any(
@@ -194,8 +238,14 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
     await GeofenceNotificationService().setupGeofences(
       filteredStores,
+      brandNames: brandNames.whereType<String>().toList(),
       radius: radius,
     );
+
+    // [추가] 매장이 당장 없더라도 기프티콘이 있다면 포그라운드 서비스 강제 시작
+    if (brandNames.isNotEmpty) {
+      await GeofenceNotificationService().startForegroundService();
+    }
 
     if (mounted) {
       setState(() {
@@ -228,6 +278,15 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
       // 3. 지도 중심 이동
       await _mapController!.setCenter(LatLng(store.latitude, store.longitude));
     }
+  }
+
+  // [복구] 마커 탭 핸들러
+  void _onMarkerTapped(StoreModel store) {
+    setState(() {
+      _selectedStore = store;
+      _selectedStoreId = store.id;
+      _showQuickRoute = true;
+    });
   }
 
   @override
@@ -332,9 +391,10 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
                       // 마커 클릭 시 해당 위치로 중심 이동 및 선택 상태 업데이트
                       if (markerId != 'my_location') {
                         _mapController?.setCenter(latLng);
-                        setState(() {
-                          _selectedStoreId = markerId;
-                        });
+                        
+                        // [복구] 선택된 매장 정보 찾기 및 오버레이 표시
+                        final store = _nearbyStores.firstWhere((s) => s.id == markerId);
+                        _onMarkerTapped(store);
                       }
                     },
                     center: LatLng(
@@ -367,6 +427,25 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
                           _selectedStoreId = null; // 레이더 배지 토글 시 선택 초기화
                         });
                       },
+                      onReset: () async {
+                        // [시연용] 모든 쿨타임 초기화
+                        await GeofenceNotificationService().clearAllCooldowns();
+                        
+                        // 즉시 지오펜싱 및 알림 체크 다시 수행
+                        if (_currentPosition != null) {
+                          _fetchNearbyStores();
+                        }
+
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text('시연용: 쿨타임 초기화 및 즉시 재탐색 수행'),
+                              duration: Duration(seconds: 1),
+                              backgroundColor: AppTheme.primaryTeal,
+                            ),
+                          );
+                        }
+                      },
                     ),
                     _ProfileButton(),
                   ],
@@ -377,7 +456,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
           // 3. 내 위치 버튼 (바텀 시트 바로 위에 배치)
           Positioned(
-            bottom: _selectedStoreId != null ? 180 : 100, // 길찾기 카드가 있을 때 위치 조정
+            bottom: 100, // 스와이프 패널의 최소 높이보다 살짝 위
             right: 16,
             child: FloatingActionButton(
               mini: true,
@@ -403,10 +482,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
             ),
           ),
 
-          // 4. 매장 선택 시 나타나는 빠른 길찾기 카드
-          if (_selectedStoreId != null) _buildQuickRouteOverlay(),
-
-          // 5. 스와이프 가능한 주변 가맹점 패널 (네비게이션 바 위에서 시작)
+          // 4. 스와이프 가능한 주변 가맹점 패널 (네비게이션 바 위에서 시작)
           DraggableScrollableSheet(
             controller: _sheetController,
             initialChildSize: 0.11, // 최소 높이
@@ -468,106 +544,16 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
           ),
           // 하단 안내 배너 (설정이 필요할 때만 노출)
           if (_showNotice) _buildBottomNotice(),
+
+          // 5. [복구] 빠른 길찾기 오버레이 (마커 클릭 시)
+          if (_showQuickRoute && _selectedStore != null)
+            Positioned(
+              bottom: 120, // 바텀 시트 핸들 위쪽
+              left: 20,
+              right: 20,
+              child: _buildQuickRouteOverlay(),
+            ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildQuickRouteOverlay() {
-    final stores =
-        _nearbyStores.where((s) => s.id == _selectedStoreId).toList();
-    if (stores.isEmpty) return const SizedBox.shrink();
-    final selectedStore = stores.first;
-
-    return Positioned(
-      bottom: 95, // 내 위치 버튼 아래, 바텀 시트 위
-      left: 16,
-      right: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        decoration: BoxDecoration(
-          color: AppTheme.secondaryNavy.withOpacity(0.95),
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.3),
-              blurRadius: 15,
-              offset: const Offset(0, 5),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.storefront_rounded,
-                color: AppTheme.primaryTeal,
-                size: 20,
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    selectedStore.placeName,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const Text(
-                    '이 매장으로 길찾기를 시작할까요?',
-                    style: TextStyle(color: Colors.white70, fontSize: 11),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: () => MapLauncher.launchRoute(
-                lat: selectedStore.latitude,
-                lng: selectedStore.longitude,
-                name: selectedStore.placeName,
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppTheme.primaryTeal,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                minimumSize: const Size(60, 36),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                elevation: 0,
-              ),
-              child: const Text(
-                '길찾기',
-                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-              ),
-            ),
-            const SizedBox(width: 4),
-            IconButton(
-              onPressed: () => setState(() => _selectedStoreId = null),
-              icon: const Icon(
-                Icons.close_rounded,
-                color: Colors.white60,
-                size: 20,
-              ),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -595,6 +581,99 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
       ),
     );
   }
+
+  /// [복구] 마커 클릭 시 나타나는 빠른 길찾기 카드
+  Widget _buildQuickRouteOverlay() {
+    if (_selectedStore == null) return const SizedBox.shrink();
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.1),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+        border: Border.all(color: AppTheme.primaryTeal.withOpacity(0.3)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: AppTheme.secondaryNavy,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _selectedStore!.matchedBrand,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _selectedStore!.placeName,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close, size: 20),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                onPressed: () {
+                  setState(() {
+                    _showQuickRoute = false;
+                    _selectedStoreId = null;
+                  });
+                },
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: ElevatedButton.icon(
+                  onPressed: () {
+                    MapLauncher.launchRoute(
+                      lat: _selectedStore!.latitude,
+                      lng: _selectedStore!.longitude,
+                      name: _selectedStore!.placeName,
+                    );
+                  },
+                  icon: const Icon(Icons.directions, size: 18),
+                  label: const Text('길찾기'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.primaryTeal,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 class _RadarBadge extends StatelessWidget {
@@ -602,12 +681,14 @@ class _RadarBadge extends StatelessWidget {
   final int storeCount;
   final bool isExpanded;
   final VoidCallback onToggle;
+  final VoidCallback onReset; // 초기화 콜백 추가
 
   const _RadarBadge({
     required this.isSearching,
     required this.storeCount,
     required this.isExpanded,
     required this.onToggle,
+    required this.onReset,
   });
 
   @override
@@ -657,6 +738,25 @@ class _RadarBadge extends StatelessWidget {
                   fontWeight: FontWeight.w700,
                   fontSize: 14,
                   color: AppTheme.secondaryNavy,
+                ),
+              ),
+              const SizedBox(width: 8),
+              // [시연용] 초기화 버튼
+              GestureDetector(
+                onTap: () {
+                  onReset();
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.primaryTeal.withOpacity(0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.refresh_rounded,
+                    size: 16,
+                    color: AppTheme.primaryTeal,
+                  ),
                 ),
               ),
             ],
