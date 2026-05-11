@@ -65,6 +65,7 @@ dependencies:
   firebase_storage: ^13.3.0
   local_auth: ^3.0.1
   path_provider: ^2.1.5
+  url_launcher: ^6.3.2
 
 dev_dependencies:
   flutter_test:
