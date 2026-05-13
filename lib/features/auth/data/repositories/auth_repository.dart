@@ -66,27 +66,68 @@ class AuthRepository {
       final nickname = kakaoUser.kakaoAccount?.profile?.nickname ?? '사용자';
       final photoUrl = kakaoUser.kakaoAccount?.profile?.thumbnailImageUrl;
       
-      // 2. Firebase 익명 로그인
-      await _auth.signInAnonymously();
-      final firebaseUser = _auth.currentUser;
+      // 2. 카카오 ID 기반 가상 이메일/비밀번호 생성
+      final String kakaoId = kakaoUser.id.toString();
+      final String email = 'k$kakaoId@gmail.com'; // 도메인을 gmail로 변경 테스트
+      final String password = 'Kakao$kakaoId!@#'; 
+      
+      UserCredential? userCredential;
+      
+      try {
+        await _auth.signOut();
+        print('[KAKAO_LOGIN] Step 3: Attempting login for $email');
+        userCredential = await _auth.signInWithEmailAndPassword(
+          email: email, 
+          password: password,
+        );
+      } catch (e) {
+        print('[KAKAO_LOGIN] Step 4: Login failed ($e). Attempting to create account.');
+        try {
+          userCredential = await _auth.createUserWithEmailAndPassword(
+            email: email, 
+            password: password,
+          );
+        } catch (e2) {
+          print('[KAKAO_LOGIN] Step 5: Create failed ($e2). Final attempt login.');
+          try {
+            userCredential = await _auth.signInWithEmailAndPassword(
+              email: email, 
+              password: password,
+            );
+          } catch (e3) {
+            print('[KAKAO_LOGIN] [CRITICAL_ERROR] Final attempt also failed: $e3');
+            rethrow;
+          }
+        }
+      }
+      
+      final firebaseUser = userCredential?.user;
       
       if (firebaseUser != null) {
         try {
+          // 카카오 프로필 정보로 Firebase 유저 정보 업데이트
           await firebaseUser.updateDisplayName(nickname);
-          if (photoUrl != null) await firebaseUser.updatePhotoURL(photoUrl);
-          await firebaseUser.reload();
+          if (photoUrl != null) {
+            await firebaseUser.updatePhotoURL(photoUrl);
+          }
           
+          // 변경사항 반영을 위해 리로드
+          await firebaseUser.reload();
           final updatedUser = _auth.currentUser;
-          // 스트림 갱신 유도
+          
+          // ID 토큰 강제 갱신으로 상태 변경 알림 유도
           await updatedUser?.getIdToken(true);
+          
+          print('[KAKAO_LOGIN] Success: User updated with nickname: $nickname');
           
           return {
             'user': updatedUser,
             'nickname': nickname,
           };
         } catch (e) {
+          print('[KAKAO_LOGIN] Profile update error: $e');
           return {
-            'user': _auth.currentUser,
+            'user': firebaseUser,
             'nickname': nickname,
           };
         }
