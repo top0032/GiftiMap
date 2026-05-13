@@ -13,15 +13,18 @@ class GifticonRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   final FirebaseAuth _auth = FirebaseAuth.instance;
 
-  // 공용 'gifticons' 컬렉션 사용
-  CollectionReference get _collection => _firestore.collection('gifticons');
-
-  // 현재 로그인한 사용자의 UID 가져오기
-  String? get _currentUserId => _auth.currentUser?.uid;
+  // 사용자별 전용 서브 컬렉션 경로 반환
+  CollectionReference? get _userCollection {
+    final uid = _auth.currentUser?.uid;
+    if (uid == null) return null;
+    return _firestore.collection('users').doc(uid).collection('gifticons');
+  }
 
   Future<void> addGifticon(GifticonModel gifticon) async {
-    final userId = _currentUserId;
-    if (userId == null) throw Exception('로그인이 필요합니다.');
+    final collection = _userCollection;
+    if (collection == null) throw Exception('로그인이 필요합니다.');
+
+    final userId = _auth.currentUser!.uid;
 
     // 로컬 저장 방식이므로 별도의 업로드 없이 전달받은 데이터 그대로 사용
     final gifticonToSave = gifticon.copyWith(
@@ -36,20 +39,18 @@ class GifticonRepository {
 
     // Firestore에 텍스트 데이터와 로컬 이미지 경로 저장
     if (gifticon.id.isEmpty) {
-      await _collection.add(data);
+      await collection.add(data);
     } else {
-      await _collection.doc(gifticon.id).set(data, SetOptions(merge: true));
+      await collection.doc(gifticon.id).set(data, SetOptions(merge: true));
     }
   }
 
   Future<List<GifticonModel>> getGifticons() async {
-    final userId = _currentUserId;
-    if (userId == null) return [];
+    final collection = _userCollection;
+    if (collection == null) return [];
 
-    // 인덱스 오류 방지를 위해 서버 정렬(orderBy) 대신 전체를 가져온 뒤 메모리에서 정렬합니다.
-    final snapshot = await _collection
-        .where('userId', isEqualTo: userId)
-        .get();
+    // 사용자 전용 서브 컬렉션이므로 전체를 가져와도 본인의 것만 반환됩니다.
+    final snapshot = await collection.get();
 
     final gifticons = snapshot.docs.map((doc) {
       final model = GifticonModel.fromFirestore(doc);
@@ -65,11 +66,15 @@ class GifticonRepository {
   }
 
   Future<void> deleteGifticon(String id) async {
-    await _collection.doc(id).delete();
+    final collection = _userCollection;
+    if (collection == null) return;
+    await collection.doc(id).delete();
   }
 
   Future<void> updateGifticonStatus(String id, bool isUsed) async {
-    await _collection.doc(id).update({'isUsed': isUsed});
+    final collection = _userCollection;
+    if (collection == null) return;
+    await collection.doc(id).update({'isUsed': isUsed});
   }
 }
 
