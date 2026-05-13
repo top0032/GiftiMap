@@ -62,7 +62,7 @@ class GeofenceNotificationService {
 
     // 3. Geofencing API 설정 (시연용으로 민감도 최대로 상향)
     Geofencing.instance.setup(
-      interval: 5000, // 5초마다 위치 갱신
+      interval: 60000, // 1분마다 위치 갱신 (배터리 최적화)
       accuracy: 100,
       statusChangeDelay: 3000, // 3초 이상 머물러야 인식
       allowsMockLocation: true,
@@ -110,8 +110,8 @@ class GeofenceNotificationService {
   void _initForegroundTask() {
     FlutterForegroundTask.init(
       androidNotificationOptions: AndroidNotificationOptions(
-        channelId: 'giftimap_foreground_service',
-        channelName: 'GiftiMap Background Service',
+        channelId: 'gifticon_foreground_service',
+        channelName: '기프티콘 백그라운드 서비스',
         channelDescription: '지오펜싱 및 위치 추적을 위한 서비스입니다.',
         channelImportance: NotificationChannelImportance.DEFAULT,
         priority: NotificationPriority.DEFAULT,
@@ -126,7 +126,7 @@ class GeofenceNotificationService {
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 5000, // 5초 간격으로 단축 (시연용 초고감도)
+        interval: 60000, // 1분 간격으로 조정 (배터리 효율 증대)
         isOnceEvent: false,
         autoRunOnBoot: true,
         allowWakeLock: true,
@@ -143,7 +143,7 @@ class GeofenceNotificationService {
       }
 
       final result = await FlutterForegroundTask.startService(
-        notificationTitle: 'GiftiMap 탐색 서비스 작동 중',
+        notificationTitle: '기프티콘 탐색 서비스 작동 중',
         notificationText: '주변 매장을 탐색하고 있습니다.',
         callback: startCallback,
       );
@@ -220,8 +220,8 @@ class GeofenceNotificationService {
 
     const AndroidNotificationDetails androidPlatformChannelSpecifics =
         AndroidNotificationDetails(
-          'giftimap_geofence_channel',
-          'Geofence Notifications',
+          'gifticon_geofence_channel',
+          '기프티콘 주변 알림',
           channelDescription: '주변 매장 접근 시 알림을 보냅니다.',
           importance: Importance.max,
           priority: Priority.high,

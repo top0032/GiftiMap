@@ -115,7 +115,7 @@ class AppScaffold extends ConsumerWidget {
         ),
         child: SafeArea(
           child: SizedBox(
-            height: 70,
+            height: 80,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
@@ -126,16 +126,30 @@ class AppScaffold extends ConsumerWidget {
                   onTap: () => context.go('/'),
                 ),
                 
-                // 네비게이션 바 중앙에 배치된 등록 버튼
                 GestureDetector(
                   onTap: () => _showAddOptions(context, ref),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: const BoxDecoration(
-                      color: AppTheme.primaryTeal,
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.add_a_photo, color: Colors.white, size: 24),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: const BoxDecoration(
+                          color: AppTheme.primaryTeal,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.add_a_photo, color: Colors.white, size: 22),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text(
+                        '기프티콘 추가',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: AppTheme.primaryTeal,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
 
@@ -185,8 +199,8 @@ class AppScaffold extends ConsumerWidget {
             const Divider(indent: 16, endIndent: 16, height: 1),
             ListTile(
               leading: const Icon(Icons.add_photo_alternate_rounded, color: AppTheme.primaryTeal),
-              title: const Text('기프티콘 앨범에서 사진만 등록'),
-              subtitle: const Text('자동 분석 없이 갤러리 사진을 그대로 저장합니다'),
+              title: const Text('직접 입력해서 등록'),
+              subtitle: const Text('이미지를 선택하고 정보를 직접 입력합니다'),
               onTap: () {
                 Navigator.pop(context);
                 context.push('/wallet/add-manual');

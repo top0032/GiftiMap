@@ -104,7 +104,7 @@ class MyApp extends ConsumerWidget {
 
     return WithForegroundTask(
       child: MaterialApp.router(
-        title: 'GiftiMap',
+        title: '기프티콘',
         theme: AppTheme.lightTheme,
         routerConfig: router,
         debugShowCheckedModeBanner: false,

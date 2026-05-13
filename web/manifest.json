@@ -1,6 +1,6 @@
 {
-    "name": "giftimap",
-    "short_name": "giftimap",
+    "name": "기프티콘",
+    "short_name": "기프티콘",
     "start_url": ".",
     "display": "standalone",
     "background_color": "#0175C2",

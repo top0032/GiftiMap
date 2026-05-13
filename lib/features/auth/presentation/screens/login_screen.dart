@@ -60,7 +60,7 @@ class LoginScreen extends ConsumerWidget {
                   const SizedBox(height: 32),
                   // 앱 타이틀
                   const Text(
-                    'GiftiMap',
+                    '기프티콘',
                     style: TextStyle(
                       fontSize: 48,
                       fontWeight: FontWeight.bold,

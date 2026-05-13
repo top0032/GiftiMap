@@ -241,17 +241,6 @@ class _GifticonListScreenState extends ConsumerState<GifticonListScreen> with Si
             )
           : _buildLockedUI(), // 미인증 시 잠금 화면 표시
       ),
-      floatingActionButton: _isUnlocked 
-          ? FloatingActionButton.extended(
-              onPressed: () => context.push('/register'),
-              backgroundColor: AppTheme.primaryTeal,
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.add_rounded),
-              label: const Text('기프티콘 등록'),
-              elevation: 4,
-            )
-          : null,
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
     );
   }
 

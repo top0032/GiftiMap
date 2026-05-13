@@ -236,7 +236,7 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
     return Scaffold(
       backgroundColor: AppTheme.backgroundLight,
       appBar: AppBar(
-        title: const Text('기프티콘 등록', style: TextStyle(color: AppTheme.secondaryNavy, fontSize: 18, fontWeight: FontWeight.bold)),
+        title: const Text('기프티콘 직접 등록', style: TextStyle(color: AppTheme.secondaryNavy, fontSize: 18, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
