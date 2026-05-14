@@ -9,6 +9,7 @@ import '../../../core/theme/theme.dart';
 import 'providers/gifticon_provider.dart';
 import '../../../core/services/security_service.dart';
 import 'dart:ui'; // 블러 효과용
+import 'package:share_plus/share_plus.dart';
 
 class GifticonDetailScreen extends ConsumerStatefulWidget {
   final GifticonModel gifticon;
@@ -50,6 +51,42 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
     }
   }
 
+  Future<void> _shareGifticon(BuildContext context, GifticonModel gifticon) async {
+    final String shareText = '[기프티맵] 기프티콘 공유\n'
+        '브랜드: ${gifticon.brandName}\n'
+        '상품명: ${gifticon.productName}\n'
+        '유효기간: ${gifticon.expirationDate}\n'
+        '바코드 번호: ${gifticon.barcodeNumber}';
+
+    try {
+      if (gifticon.imageUrl != null && gifticon.imageUrl!.isNotEmpty) {
+        if (gifticon.imageUrl!.startsWith('http')) {
+          await Share.share('$shareText\n이미지: ${gifticon.imageUrl!}');
+        } else {
+          final file = File(gifticon.imageUrl!);
+          if (await file.exists()) {
+            await Share.shareXFiles([XFile(gifticon.imageUrl!)], text: shareText);
+          } else {
+            await Share.share(shareText);
+          }
+        }
+      } else {
+        await Share.share(shareText);
+      }
+    } catch (e) {
+      debugPrint('공유 오류: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('공유에 실패했습니다. 앱을 완전히 종료한 후 다시 실행해주세요.'),
+            backgroundColor: Colors.red,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final gifticonsAsyncValue = ref.watch(gifticonListProvider);
@@ -69,6 +106,13 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
           onPressed: () => Navigator.of(context).pop(),
         ),
         actions: [
+          TextButton(
+            onPressed: () => _shareGifticon(context, currentGifticon),
+            child: const Text(
+              '공유',
+              style: TextStyle(color: AppTheme.secondaryNavy, fontSize: 16, fontWeight: FontWeight.w600),
+            ),
+          ),
           TextButton(
             onPressed: () {
               context.push('/wallet/edit', extra: currentGifticon);
@@ -145,37 +189,79 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
               const SizedBox(height: 10),
               // 실제 등록한 기프티콘 이미지가 있을 경우 화면 중앙 상단에 렌더링
               if (currentGifticon.imageUrl != null && currentGifticon.imageUrl!.isNotEmpty)
-                Container(
-                  width: MediaQuery.of(context).size.width * 0.6,
-                  height: MediaQuery.of(context).size.width * 0.6,
-                  margin: const EdgeInsets.only(bottom: 24),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(24),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.08),
-                        blurRadius: 20,
-                        offset: const Offset(0, 10),
+                GestureDetector(
+                  onTap: () {
+                    showDialog(
+                      context: context,
+                      builder: (context) => Dialog(
+                        backgroundColor: Colors.transparent,
+                        insetPadding: EdgeInsets.zero,
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            GestureDetector(
+                              onTap: () => Navigator.of(context).pop(),
+                              child: Container(color: Colors.black87),
+                            ),
+                            InteractiveViewer(
+                              panEnabled: true,
+                              minScale: 0.5,
+                              maxScale: 4.0,
+                              child: Center(
+                                child: currentGifticon.imageUrl!.startsWith('http')
+                                  ? Image.network(currentGifticon.imageUrl!)
+                                  : Image.file(File(currentGifticon.imageUrl!)),
+                              ),
+                            ),
+                            SafeArea(
+                              child: Align(
+                                alignment: Alignment.topRight,
+                                child: Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: IconButton(
+                                    icon: const Icon(Icons.close, color: Colors.white, size: 30),
+                                    onPressed: () => Navigator.of(context).pop(),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
-                    ],
+                    );
+                  },
+                  child: Container(
+                    width: MediaQuery.of(context).size.width * 0.6,
+                    height: MediaQuery.of(context).size.width * 0.6,
+                    margin: const EdgeInsets.only(bottom: 24),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 20,
+                          offset: const Offset(0, 10),
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: currentGifticon.imageUrl!.startsWith('http')
+                      ? Image.network(
+                          currentGifticon.imageUrl!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, loadingProgress) {
+                            if (loadingProgress == null) return child;
+                            return const Center(child: CircularProgressIndicator());
+                          },
+                          errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                        )
+                      : Image.file(
+                          File(currentGifticon.imageUrl!),
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
+                        ),
                   ),
-                  clipBehavior: Clip.antiAlias,
-                  child: currentGifticon.imageUrl!.startsWith('http')
-                    ? Image.network(
-                        currentGifticon.imageUrl!,
-                        fit: BoxFit.cover,
-                        loadingBuilder: (context, child, loadingProgress) {
-                          if (loadingProgress == null) return child;
-                          return const Center(child: CircularProgressIndicator());
-                        },
-                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                      )
-                    : Image.file(
-                        File(currentGifticon.imageUrl!),
-                        fit: BoxFit.cover,
-                        errorBuilder: (context, error, stackTrace) => const Center(child: Icon(Icons.broken_image_rounded, size: 64, color: Colors.grey)),
-                      ),
                 ),
               // 상태 배지 추가
               Container(

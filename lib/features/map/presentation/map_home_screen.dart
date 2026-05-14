@@ -369,7 +369,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     return Scaffold(
       body: Stack(
         children: [
-          // 1. 전체 지도 배경
+            // 1. 전체 지도 배경
           Positioned.fill(
             child: _isLoading
                 ? Container(
