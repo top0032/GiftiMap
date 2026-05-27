@@ -62,7 +62,7 @@ class GeofenceNotificationService {
 
     // 3. Geofencing API 설정 (시연용으로 민감도 최대로 상향)
     Geofencing.instance.setup(
-      interval: 60000, // 1분마다 위치 갱신 (배터리 최적화)
+      interval: 180000, // 3분마다 위치 갱신 (배터리 최적화)
       accuracy: 100,
       statusChangeDelay: 3000, // 3초 이상 머물러야 인식
       allowsMockLocation: true,
@@ -126,7 +126,7 @@ class GeofenceNotificationService {
         playSound: false,
       ),
       foregroundTaskOptions: const ForegroundTaskOptions(
-        interval: 60000, // 1분 간격으로 조정 (배터리 효율 증대)
+        interval: 180000, // 3분 간격으로 조정 (배터리 효율 증대)
         isOnceEvent: false,
         autoRunOnBoot: true,
         allowWakeLock: true,
@@ -155,6 +155,17 @@ class GeofenceNotificationService {
 
   Future<void> stopForegroundService() async {
     await FlutterForegroundTask.stopService();
+  }
+
+  /// 🔋 배터리 절약을 위해 포그라운드 서비스와 네이티브 지오펜싱을 완전히 정지합니다.
+  Future<void> stopTracking() async {
+    await stopForegroundService();
+    if (!kIsWeb && !Platform.isWindows) {
+      if (Geofencing.instance.isRunningService) {
+        await Geofencing.instance.stop();
+      }
+    }
+    debugPrint('--- [Geofence] Tracking Completely Stopped ---');
   }
 
   Future<void> showNotification(
