@@ -47,8 +47,8 @@ class GeofenceTaskHandler extends TaskHandler {
       Position? currentPos;
       try {
         currentPos = await Geolocator.getCurrentPosition(
-          desiredAccuracy: LocationAccuracy.high,
-          timeLimit: const Duration(seconds: 8),
+          desiredAccuracy: LocationAccuracy.medium, // 배터리 효율 향상을 위해 High -> Medium으로 변경
+          timeLimit: const Duration(seconds: 5), // GPS 센서 기동 시간 단축
         );
       } catch (e) {
         currentPos = await Geolocator.getLastKnownPosition();
@@ -142,8 +142,8 @@ class GeofenceTaskHandler extends TaskHandler {
       lastLng,
     );
 
-    // 50m 이상 이동했거나 데이터가 아예 없는 경우 재검색 (시연용 초고감도)
-    if (distance > 50 || (lastLat == 0.0 && lastLng == 0.0)) {
+    // 300m 이상 이동했거나 데이터가 아예 없는 경우 재검색 (배터리 효율 최적화)
+    if (distance > 300 || (lastLat == 0.0 && lastLng == 0.0)) {
       debugPrint(
         '--- [Background] User moved $distance m. Refreshing stores... ---',
       );
