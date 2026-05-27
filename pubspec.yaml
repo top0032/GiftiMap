@@ -74,6 +74,7 @@ dev_dependencies:
 
   build_runner: ^2.4.13
   riverpod_generator: ^4.0.3
+  flutter_launcher_icons: ^0.13.1
 
   # The "flutter_lints" package below contains a set of recommended lints to
   # encourage good coding practices. The lint set provided by the package is
@@ -96,6 +97,15 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - .env
+    - assets/images/
+
+# 🔋 앱 아이콘 자동 생성 설정
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/app_icon.png"
+  adaptive_icon_background: "#FFFFFF" # 안드로이드 적응형 아이콘용 배경
+  adaptive_icon_foreground: "assets/images/app_icon.png"
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
