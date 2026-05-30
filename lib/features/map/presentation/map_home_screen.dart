@@ -46,6 +46,9 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   bool _showNotice = false;
   String _noticeText = '';
 
+  // 🔋 배터리 보존을 위한 백그라운드 탐색 활성화 여부
+  bool _isTracking = true;
+
   @override
   void initState() {
     super.initState();
@@ -56,6 +59,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
     // 최초 실행 시 권한 및 최적화 체크
     _checkPermissionsStatus();
+    _checkTrackingStatus(); // 현재 백그라운드 탐색 상태 초기화
   }
 
   @override
@@ -68,9 +72,81 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // 설정 화면에서 돌아왔을 때(Resumed) 권한 다시 체크
+    // 설정 화면에서 돌아왔을 때(Resumed) 권한 및 트래킹 상태 다시 체크
     if (state == AppLifecycleState.resumed) {
       _checkPermissionsStatus();
+      _checkTrackingStatus();
+    }
+  }
+
+  /// 🔋 현재 백그라운드 서비스 활성화 여부를 점검합니다.
+  Future<void> _checkTrackingStatus() async {
+    final isRunning = await FlutterForegroundTask.isRunningService;
+    if (mounted) {
+      setState(() {
+        _isTracking = isRunning;
+      });
+    }
+  }
+
+  /// 🔋 백그라운드 탐색 제어(시작/중지)를 토글합니다.
+  Future<void> _toggleTracking() async {
+    if (_isTracking) {
+      // 1. 탐색 완전히 중지 (포그라운드 서비스 + 네이티브 지오펜스 해제)
+      await GeofenceNotificationService().stopTracking();
+      if (mounted) {
+        setState(() {
+          _isTracking = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🔋 기프티콘 백그라운드 탐색이 중지되었습니다.\n     배터리가 절약됩니다.'),
+            duration: Duration(seconds: 2),
+            backgroundColor: AppTheme.secondaryNavy,
+          ),
+        );
+      }
+    } else {
+      // 2. 탐색 시작 준비
+      if (mounted) {
+        setState(() => _isSearchingStores = true);
+      }
+
+      // 위치 '항상 허용' 권한 재확인
+      final locationStatus = await Permission.locationAlways.status;
+      if (!locationStatus.isGranted) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('📍 백그라운드 탐색을 활성화하려면 위치 권한 "항상 허용"이 필요합니다.'),
+              duration: Duration(seconds: 2),
+              backgroundColor: Colors.redAccent,
+            ),
+          );
+          setState(() => _isSearchingStores = false);
+        }
+        return;
+      }
+
+      // 포그라운드 서비스 시작 및 위치 탐색 즉시 기동
+      await GeofenceNotificationService().startForegroundService();
+      if (_currentPosition != null) {
+        await _fetchNearbyStores();
+      }
+
+      if (mounted) {
+        setState(() {
+          _isTracking = true;
+          _isSearchingStores = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('🚀 기프티콘 백그라운드 탐색을 재시작합니다!'),
+            duration: Duration(seconds: 2),
+            backgroundColor: AppTheme.primaryTeal,
+          ),
+        );
+      }
     }
   }
 
@@ -96,13 +172,13 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   Future<void> _initGeofencing() async {
     // 1. 알림 권한 요청
     await Permission.notification.request();
-    
+
     // 2. 기본 위치 권한 요청 (앱 사용 중 허용)
     await Permission.location.request();
 
     // 3. 서비스 초기화 및 시작 시도
     await GeofenceNotificationService().initialize();
-    
+
     if (_currentPosition != null) {
       _fetchNearbyStores();
     }
@@ -149,23 +225,26 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
   /// [추가] 실시간 위치 변화 감지 및 자동 재탐색
   void _startPositionUpdates() {
-    _positionSubscription = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 50, // 50m 이상 이동 시 이벤트 발생 (시연용 고감도)
-      ),
-    ).listen((Position position) {
-      if (mounted) {
-        setState(() {
-          _currentPosition = position;
+    _positionSubscription =
+        Geolocator.getPositionStream(
+          locationSettings: const LocationSettings(
+            accuracy: LocationAccuracy.high,
+            distanceFilter: 50, // 50m 이상 이동 시 이벤트 발생 (시연용 고감도)
+          ),
+        ).listen((Position position) {
+          if (mounted) {
+            setState(() {
+              _currentPosition = position;
+            });
+
+            // 위치가 바뀌면 주변 매장 새로고침 및 지오펜싱 업데이트
+            _fetchNearbyStores();
+
+            debugPrint(
+              '--- [Foreground] Position Updated: ${position.latitude}, ${position.longitude} ---',
+            );
+          }
         });
-        
-        // 위치가 바뀌면 주변 매장 새로고침 및 지오펜싱 업데이트
-        _fetchNearbyStores();
-        
-        debugPrint('--- [Foreground] Position Updated: ${position.latitude}, ${position.longitude} ---');
-      }
-    });
   }
 
   Future<void> _fetchNearbyStores() async {
@@ -392,7 +471,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     return Scaffold(
       body: Stack(
         children: [
-            // 1. 전체 지도 배경
+          // 1. 전체 지도 배경
           Positioned.fill(
             child: _isLoading
                 ? Container(
@@ -414,9 +493,11 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
                       // 마커 클릭 시 해당 위치로 중심 이동 및 선택 상태 업데이트
                       if (markerId != 'my_location') {
                         _mapController?.setCenter(latLng);
-                        
+
                         // [복구] 선택된 매장 정보 찾기 및 오버레이 표시
-                        final store = _nearbyStores.firstWhere((s) => s.id == markerId);
+                        final store = _nearbyStores.firstWhere(
+                          (s) => s.id == markerId,
+                        );
                         _onMarkerTapped(store);
                       }
                     },
@@ -439,36 +520,55 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.start, // 상단 정렬로 일관성 확보
                   children: [
-                    _RadarBadge(
-                      isSearching: _isSearchingStores,
-                      storeCount: _nearbyStores.length,
-                      isExpanded: _showStores,
-                      onToggle: () {
-                        setState(() {
-                          _showStores = !_showStores;
-                          _selectedStoreId = null; // 레이더 배지 토글 시 선택 초기화
-                        });
-                      },
-                      onReset: () async {
-                        // [시연용] 모든 쿨타임 초기화
-                        await GeofenceNotificationService().clearAllCooldowns();
-                        
-                        // 즉시 지오펜싱 및 알림 체크 다시 수행
-                        if (_currentPosition != null) {
-                          _fetchNearbyStores();
-                        }
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        _RadarBadge(
+                          isSearching: _isSearchingStores,
+                          storeCount: _nearbyStores.length,
+                          isExpanded: _showStores,
+                          isTrackingEnabled: _isTracking, // 🔋 탐색 비활성화 시 쿨타임 초기화 금지 상태 연동
+                          onToggle: () {
+                            setState(() {
+                              _showStores = !_showStores;
+                              _selectedStoreId = null; // 레이더 배지 토글 시 선택 초기화
+                            });
+                          },
+                          onReset: () async {
+                            // [시연용] 모든 쿨타임 초기화
+                            await GeofenceNotificationService()
+                                .clearAllCooldowns();
 
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('시연용: 쿨타임 초기화 및 즉시 재탐색 수행'),
-                              duration: Duration(seconds: 1),
-                              backgroundColor: AppTheme.primaryTeal,
-                            ),
-                          );
-                        }
-                      },
+                            // 즉시 지오펜싱 및 알림 체크 다시 수행
+                            if (_currentPosition != null) {
+                              _fetchNearbyStores();
+                            }
+
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    '⚙️ 원활한 시연을 위해 알림 발송 제한(1시간) 설정을 모두 초기화했습니다.',
+                                  ),
+                                  duration: Duration(
+                                    seconds: 2,
+                                  ), // 문구를 읽을 수 있도록 시간을 2초로 연장
+                                  backgroundColor: AppTheme.primaryTeal,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 8),
+                        // 🔋 배터리 보존을 위한 수동 탐색 제어(시작/중지) 버튼
+                        _TrackingToggleButton(
+                          isTracking: _isTracking,
+                          onPressed: _toggleTracking,
+                        ),
+                      ],
                     ),
                     _ProfileButton(),
                   ],
@@ -699,12 +799,78 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 }
 
+/// 🔋 배터리 보존을 위해 백그라운드 탐색을 끄거나 켤 수 있는 수동 토글 버튼입니다.
+class _TrackingToggleButton extends StatelessWidget {
+  final bool isTracking;
+  final VoidCallback onPressed;
+
+  const _TrackingToggleButton({
+    required this.isTracking,
+    required this.onPressed,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onPressed,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeInOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceWhite.withOpacity(
+            0.9,
+          ), // 쿨타임 초기화 배지와 동일한 배경 테마
+          borderRadius: BorderRadius.circular(20), // 동일한 둥근 모서리 적용
+          border: Border.all(
+            color: isTracking
+                ? AppTheme.primaryTeal.withOpacity(0.3)
+                : Colors.grey.shade400.withOpacity(0.4),
+            width: 1,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              isTracking
+                  ? Icons.radar_rounded
+                  : Icons.location_disabled_rounded,
+              color: isTracking ? AppTheme.primaryTeal : Colors.grey.shade600,
+              size: 16,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isTracking ? '백그라운드 탐색 ON' : '백그라운드 탐색 OFF',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: isTracking
+                    ? AppTheme.secondaryNavy
+                    : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _RadarBadge extends StatelessWidget {
   final bool isSearching;
   final int storeCount;
   final bool isExpanded;
   final VoidCallback onToggle;
   final VoidCallback onReset; // 초기화 콜백 추가
+  final bool isTrackingEnabled; // 🔋 현재 탐색 활성화 여부 추가
 
   const _RadarBadge({
     required this.isSearching,
@@ -712,6 +878,7 @@ class _RadarBadge extends StatelessWidget {
     required this.isExpanded,
     required this.onToggle,
     required this.onReset,
+    required this.isTrackingEnabled, // 🔋 필수 전달인자 설정
   });
 
   @override
@@ -764,21 +931,25 @@ class _RadarBadge extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 8),
-              // [시연용] 초기화 버튼
+              // [시연용] 초기화 버튼 (🔋 백그라운드 탐색 OFF 시 비활성화 및 시각적 흐림 처리)
               GestureDetector(
-                onTap: () {
-                  onReset();
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: BoxDecoration(
-                    color: AppTheme.primaryTeal.withOpacity(0.1),
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.refresh_rounded,
-                    size: 16,
-                    color: AppTheme.primaryTeal,
+                onTap: isTrackingEnabled ? onReset : null,
+                child: AnimatedOpacity(
+                  duration: const Duration(milliseconds: 200),
+                  opacity: isTrackingEnabled ? 1.0 : 0.3,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: isTrackingEnabled
+                          ? AppTheme.primaryTeal.withOpacity(0.1)
+                          : Colors.grey.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      Icons.refresh_rounded,
+                      size: 16,
+                      color: isTrackingEnabled ? AppTheme.primaryTeal : Colors.grey,
+                    ),
                   ),
                 ),
               ),
