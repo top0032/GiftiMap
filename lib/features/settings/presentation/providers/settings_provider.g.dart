@@ -82,7 +82,7 @@ final class SettingsControllerProvider
 }
 
 String _$settingsControllerHash() =>
-    r'efc5678f33157cb70f23c84a9390a286a73f6bf1';
+    r'e92dc61e096b843bd145b1927e802ccb59666ec7';
 
 abstract class _$SettingsController
     extends $AsyncNotifier<NotificationSettings> {

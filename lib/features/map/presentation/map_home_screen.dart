@@ -11,6 +11,7 @@ import '../../../core/theme/theme.dart';
 import '../data/services/kakao_local_api_service.dart';
 import '../data/services/geofence_notification_service.dart';
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:geofencing_api/geofencing_api.dart' show Geofencing;
 import '../domain/models/store_model.dart';
 import '../../gifticon/presentation/providers/gifticon_provider.dart';
 import '../../auth/presentation/providers/auth_provider.dart';
@@ -232,19 +233,28 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
 
     filteredStores.sort((a, b) => a.distance.compareTo(b.distance));
 
-    // 설정에서 지오펜싱 반경 가져오기
+    // 설정에서 매장 주변 알림 설정 가져오기
     final settings = ref.read(settingsControllerProvider).value;
+    final isGeofenceEnabled = settings?.isGeofenceEnabled ?? true;
     final radius = settings?.geofenceRadius ?? 200.0;
 
-    await GeofenceNotificationService().setupGeofences(
-      filteredStores,
-      brandNames: brandNames.whereType<String>().toList(),
-      radius: radius,
-    );
+    if (!isGeofenceEnabled) {
+      // 매장 주변 알림이 비활성화된 경우 백그라운드 서비스 및 지오펜싱 강제 종료
+      if (Geofencing.instance.isRunningService) {
+        await Geofencing.instance.stop();
+      }
+      await GeofenceNotificationService().stopForegroundService();
+    } else {
+      await GeofenceNotificationService().setupGeofences(
+        filteredStores,
+        brandNames: brandNames.whereType<String>().toList(),
+        radius: radius,
+      );
 
-    // [추가] 매장이 당장 없더라도 기프티콘이 있다면 포그라운드 서비스 강제 시작
-    if (brandNames.isNotEmpty) {
-      await GeofenceNotificationService().startForegroundService();
+      // [추가] 매장이 당장 없더라도 기프티콘이 있다면 포그라운드 서비스 강제 시작
+      if (brandNames.isNotEmpty) {
+        await GeofenceNotificationService().startForegroundService();
+      }
     }
 
     if (mounted) {
@@ -295,6 +305,19 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     ref.listen(gifticonListProvider, (previous, next) {
       if (next.hasValue && _currentPosition != null) {
         _fetchNearbyStores();
+      }
+    });
+
+    // 설정의 상태 변화를 구독 (알림 활성화 여부나 거리 변경 시 재탐색 또는 서비스 정지 유도)
+    ref.listen(settingsControllerProvider, (previous, next) {
+      if (next.hasValue && previous?.hasValue == true) {
+        final prevGeofence = previous!.value!.isGeofenceEnabled;
+        final nextGeofence = next.value!.isGeofenceEnabled;
+        final prevRadius = previous.value!.geofenceRadius;
+        final nextRadius = next.value!.geofenceRadius;
+        if (prevGeofence != nextGeofence || prevRadius != nextRadius) {
+          _fetchNearbyStores();
+        }
       }
     });
 

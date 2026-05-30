@@ -5,6 +5,8 @@ import '../../domain/models/notification_settings.dart';
 import '../../../gifticon/data/repositories/gifticon_repository.dart';
 import '../../../gifticon/data/services/expiration_notification_service.dart';
 import 'package:giftimap/features/auth/presentation/providers/auth_provider.dart';
+import '../../../map/data/services/geofence_notification_service.dart';
+import 'package:geofencing_api/geofencing_api.dart';
 
 part 'settings_provider.g.dart';
 
@@ -79,6 +81,27 @@ class SettingsController extends _$SettingsController {
       } else {
         // 다시 활성화 시 재스케줄링
         _rescheduleAllNotifications();
+      }
+      
+      return newSettings;
+    });
+  }
+
+  Future<void> toggleGeofenceEnabled(bool enabled) async {
+    final repo = ref.read(settingsRepositoryProvider);
+    final currentSettings = state.value ?? NotificationSettings.defaultSettings();
+    final newSettings = currentSettings.copyWith(isGeofenceEnabled: enabled);
+    
+    state = const AsyncValue.loading();
+    state = await AsyncValue.guard(() async {
+      await repo.saveNotificationSettings(newSettings);
+      
+      if (!enabled) {
+        // 비활성화 시 백그라운드 서비스 및 지오펜싱 즉시 중지하여 배터리 절약
+        await GeofenceNotificationService().stopForegroundService();
+        if (Geofencing.instance.isRunningService) {
+          await Geofencing.instance.stop();
+        }
       }
       
       return newSettings;

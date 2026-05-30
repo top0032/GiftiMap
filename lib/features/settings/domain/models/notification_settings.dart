@@ -26,14 +26,16 @@ class NotificationSettings {
   final List<AlertConfig> alerts; // 통합된 알림 설정 리스트
   final bool isEnabled;          // 알림 전체 사용 여부
   final double geofenceRadius;   // 지오펜싱 알림 반경 (미터 단위)
+  final bool isGeofenceEnabled;  // 주변 매장 알림 사용 여부 (백그라운드 활성화 여부)
 
   NotificationSettings({
     required this.alerts,
     this.isEnabled = true,
     this.geofenceRadius = 200.0,
+    this.isGeofenceEnabled = true,
   });
 
-  // 기본값 설정 (당일 9시, 1일 전 9시, 3일 전 9시, 반경 200m)
+  // 기본값 설정 (당일 9시, 1일 전 9시, 3일 전 9시, 반경 200m, 지오펜싱 켜짐)
   factory NotificationSettings.defaultSettings() {
     return NotificationSettings(
       alerts: [
@@ -43,6 +45,7 @@ class NotificationSettings {
       ],
       isEnabled: true,
       geofenceRadius: 200.0,
+      isGeofenceEnabled: true,
     );
   }
 
@@ -50,11 +53,13 @@ class NotificationSettings {
     List<AlertConfig>? alerts,
     bool? isEnabled,
     double? geofenceRadius,
+    bool? isGeofenceEnabled,
   }) {
     return NotificationSettings(
       alerts: alerts ?? this.alerts,
       isEnabled: isEnabled ?? this.isEnabled,
       geofenceRadius: geofenceRadius ?? this.geofenceRadius,
+      isGeofenceEnabled: isGeofenceEnabled ?? this.isGeofenceEnabled,
     );
   }
 
@@ -63,6 +68,7 @@ class NotificationSettings {
       'alerts': alerts.map((e) => e.toJson()).toList(),
       'isEnabled': isEnabled,
       'geofenceRadius': geofenceRadius,
+      'isGeofenceEnabled': isGeofenceEnabled,
     };
   }
 
@@ -73,6 +79,7 @@ class NotificationSettings {
           .toList(),
       isEnabled: json['isEnabled'] ?? true,
       geofenceRadius: (json['geofenceRadius'] as num?)?.toDouble() ?? 200.0,
+      isGeofenceEnabled: json['isGeofenceEnabled'] ?? true,
     );
   }
 }
