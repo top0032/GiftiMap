@@ -121,7 +121,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🔕 근처 매장 알림이 꺼졌습니다.\n     앱을 닫아도 알림이 울리지 않습니다.'),
+            content: Text('🔕 매장 알림 및 위치 탐색을 완전히 껐습니다.\n     알림이 오지 않으며 배터리가 절약됩니다.'),
             duration: Duration(seconds: 2),
             backgroundColor: AppTheme.secondaryNavy,
           ),
@@ -165,7 +165,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🔔 근처 매장 알림이 켜졌습니다!'),
+            content: Text('🔔 매장 알림 및 위치 탐색이 켜졌습니다!\n     백그라운드에서 주변 매장을 찾습니다.'),
             duration: Duration(seconds: 2),
             backgroundColor: AppTheme.primaryTeal,
           ),
@@ -872,7 +872,7 @@ class _TrackingToggleButton extends StatelessWidget {
             ),
             const SizedBox(width: 6),
             Text(
-              isTracking ? '근처 매장 알림 ON' : '근처 매장 알림 OFF',
+              isTracking ? '매장 알림 ON' : '매장 알림 OFF (배터리 절약)',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
