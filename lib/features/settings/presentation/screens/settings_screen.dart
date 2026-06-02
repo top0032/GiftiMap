@@ -34,10 +34,6 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 _buildSecurityToggleSection(context, ref, isSecurityOn),
-                Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
-                _buildGeofenceToggleSection(context, ref, settings.isGeofenceEnabled),
-                Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
-                _buildGeofenceRadiusSection(context, ref, settings.geofenceRadius, settings.isGeofenceEnabled),
                 Divider(height: 8, thickness: 8, color: Colors.grey.shade100),
                 _buildToggleSection(context, ref, settings.isEnabled),
                 if (settings.isEnabled) ...[
@@ -98,106 +94,7 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
-  Widget _buildGeofenceToggleSection(BuildContext context, WidgetRef ref, bool isGeofenceEnabled) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '매장 주변 알림',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '주변 매장 접근 시 알림을 보냅니다. (비활성화 시 배터리 절약)',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-            ],
-          ),
-          Switch.adaptive(
-            value: isGeofenceEnabled,
-            activeColor: AppTheme.primaryTeal,
-            onChanged: (value) => ref.read(settingsControllerProvider.notifier).toggleGeofenceEnabled(value),
-          ),
-        ],
-      ),
-    );
-  }
 
-  Widget _buildGeofenceRadiusSection(BuildContext context, WidgetRef ref, double radius, bool isGeofenceEnabled) {
-    return AnimatedOpacity(
-      duration: const Duration(milliseconds: 200),
-      opacity: isGeofenceEnabled ? 1.0 : 0.4,
-      child: IgnorePointer(
-        ignoring: !isGeofenceEnabled,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text(
-                    '매장 주변 알림 거리',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
-                  ),
-                  Text(
-                    '${radius.toInt()}m',
-                    style: TextStyle(
-                      fontSize: 16, 
-                      fontWeight: FontWeight.bold, 
-                      color: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              const Text(
-                '설정한 거리 안에 매장이 있으면 알림을 보냅니다.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-              const SizedBox(height: 8),
-              SliderTheme(
-                data: SliderTheme.of(context).copyWith(
-                  activeTrackColor: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey.shade300,
-                  inactiveTrackColor: isGeofenceEnabled ? AppTheme.primaryTeal.withOpacity(0.1) : Colors.grey.shade100,
-                  thumbColor: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey,
-                  overlayColor: isGeofenceEnabled ? AppTheme.primaryTeal.withOpacity(0.2) : Colors.transparent,
-                  valueIndicatorColor: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey,
-                  valueIndicatorTextStyle: const TextStyle(color: Colors.white),
-                ),
-                child: Slider(
-                  value: radius,
-                  min: 100,
-                  max: 300,
-                  divisions: 4, // 100, 150, 200, 250, 300
-                  label: '${radius.toInt()}m',
-                  onChanged: (value) {
-                    ref.read(settingsControllerProvider.notifier).updateGeofenceRadius(value);
-                  },
-                ),
-              ),
-              const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 12),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text('100m', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                    Text('300m', style: TextStyle(fontSize: 11, color: Colors.grey)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildToggleSection(BuildContext context, WidgetRef ref, bool isEnabled) {
     return Container(

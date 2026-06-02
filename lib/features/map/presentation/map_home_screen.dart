@@ -79,28 +79,49 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
     }
   }
 
-  /// 🔋 현재 백그라운드 서비스 활성화 여부를 점검합니다.
+  /// 🔋 현재 백그라운드 서비스 활성화 여부 및 사용자 설정을 점검합니다.
   Future<void> _checkTrackingStatus() async {
     final isRunning = await FlutterForegroundTask.isRunningService;
-    if (mounted) {
-      setState(() {
-        _isTracking = isRunning;
-      });
+    final settings = ref.read(settingsControllerProvider).value;
+    final isGeofenceEnabled = settings?.isGeofenceEnabled ?? true;
+
+    // 만약 사용자가 명시적으로 알림을 껐다면, 서비스가 돌고 있어도(혹은 곧 꺼지더라도) 
+    // UI에서는 강제로 OFF(false) 상태로 둡니다. 그리고 서비스도 끕니다.
+    if (!isGeofenceEnabled) {
+      if (isRunning) {
+         await GeofenceNotificationService().stopTracking();
+      }
+      if (mounted) {
+        setState(() {
+          _isTracking = false;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _isTracking = isRunning;
+        });
+      }
     }
   }
 
   /// 🔋 백그라운드 탐색 제어(시작/중지)를 토글합니다.
   Future<void> _toggleTracking() async {
+    final settingsNotifier = ref.read(settingsControllerProvider.notifier);
+
     if (_isTracking) {
-      // 1. 탐색 완전히 중지 (포그라운드 서비스 + 네이티브 지오펜스 해제)
+      // 1. 사용자 설정에 OFF로 영구 저장
+      await settingsNotifier.toggleGeofenceEnabled(false);
+      // 2. 탐색 완전히 중지 (포그라운드 서비스 + 네이티브 지오펜스 해제)
       await GeofenceNotificationService().stopTracking();
+      
       if (mounted) {
         setState(() {
           _isTracking = false;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🔋 기프티콘 백그라운드 탐색이 중지되었습니다.\n     배터리가 절약됩니다.'),
+            content: Text('🔕 근처 매장 알림이 꺼졌습니다.\n     앱을 닫아도 알림이 울리지 않습니다.'),
             duration: Duration(seconds: 2),
             backgroundColor: AppTheme.secondaryNavy,
           ),
@@ -118,7 +139,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('📍 백그라운드 탐색을 활성화하려면 위치 권한 "항상 허용"이 필요합니다.'),
+              content: Text('📍 근처 매장 알림을 받으려면 위치 권한 "항상 허용"이 필요합니다.'),
               duration: Duration(seconds: 2),
               backgroundColor: Colors.redAccent,
             ),
@@ -128,8 +149,11 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
         return;
       }
 
+      // 1. 사용자 설정에 ON으로 영구 저장
+      await settingsNotifier.toggleGeofenceEnabled(true);
       // 포그라운드 서비스 시작 및 위치 탐색 즉시 기동
       await GeofenceNotificationService().startForegroundService();
+      
       if (_currentPosition != null) {
         await _fetchNearbyStores();
       }
@@ -141,7 +165,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('🚀 기프티콘 백그라운드 탐색을 재시작합니다!'),
+            content: Text('🔔 근처 매장 알림이 켜졌습니다!'),
             duration: Duration(seconds: 2),
             backgroundColor: AppTheme.primaryTeal,
           ),
@@ -799,7 +823,7 @@ class _MapHomeScreenState extends ConsumerState<MapHomeScreen>
   }
 }
 
-/// 🔋 배터리 보존을 위해 백그라운드 탐색을 끄거나 켤 수 있는 수동 토글 버튼입니다.
+/// 🔔 백그라운드 알림을 끄거나 켤 수 있는 수동 토글 버튼입니다.
 class _TrackingToggleButton extends StatelessWidget {
   final bool isTracking;
   final VoidCallback onPressed;
@@ -841,14 +865,14 @@ class _TrackingToggleButton extends StatelessWidget {
           children: [
             Icon(
               isTracking
-                  ? Icons.radar_rounded
-                  : Icons.location_disabled_rounded,
+                  ? Icons.notifications_active_rounded
+                  : Icons.notifications_off_rounded,
               color: isTracking ? AppTheme.primaryTeal : Colors.grey.shade600,
               size: 16,
             ),
             const SizedBox(width: 6),
             Text(
-              isTracking ? '백그라운드 탐색 ON' : '백그라운드 탐색 OFF',
+              isTracking ? '근처 매장 알림 ON' : '근처 매장 알림 OFF',
               style: TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,

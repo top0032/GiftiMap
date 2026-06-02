@@ -34,7 +34,9 @@ class _GifticonEditScreenState extends ConsumerState<GifticonEditScreen> {
       text: widget.gifticon.barcodeNumber == '미등록' ? '' : widget.gifticon.barcodeNumber,
     );
     if (widget.gifticon.imageUrl != null && widget.gifticon.imageUrl!.isNotEmpty) {
-      _selectedImage = File(widget.gifticon.imageUrl!);
+      if (!widget.gifticon.imageUrl!.startsWith('http')) {
+        _selectedImage = File(widget.gifticon.imageUrl!);
+      }
     }
   }
 
@@ -72,7 +74,7 @@ class _GifticonEditScreenState extends ConsumerState<GifticonEditScreen> {
         productName: _productController.text,
         expirationDate: _expirationController.text,
         barcodeNumber: _barcodeController.text.isEmpty ? '미등록' : _barcodeController.text,
-        imageUrl: _selectedImage?.path,
+        imageUrl: _selectedImage?.path ?? widget.gifticon.imageUrl,
       );
 
       ref.read(gifticonListProvider.notifier).updateGifticon(updatedGifticon);
@@ -253,7 +255,16 @@ class _GifticonEditScreenState extends ConsumerState<GifticonEditScreen> {
                               width: double.infinity,
                             ),
                           )
-                        : Column(
+                        : (widget.gifticon.imageUrl != null && widget.gifticon.imageUrl!.startsWith('http'))
+                            ? ClipRRect(
+                                borderRadius: BorderRadius.circular(18),
+                                child: Image.network(
+                                  widget.gifticon.imageUrl!,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                ),
+                              )
+                            : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               const Icon(Icons.add_photo_alternate_rounded, size: 48, color: AppTheme.primaryTeal),
