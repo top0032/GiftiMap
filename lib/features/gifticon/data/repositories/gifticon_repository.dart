@@ -25,10 +25,29 @@ class GifticonRepository {
     if (collection == null) throw Exception('로그인이 필요합니다.');
 
     final userId = _auth.currentUser!.uid;
+    
+    String? finalImageUrl = gifticon.imageUrl;
 
-    // 로컬 저장 방식이므로 별도의 업로드 없이 전달받은 데이터 그대로 사용
+    // 로컬 파일인 경우 Firebase Storage에 업로드
+    if (finalImageUrl != null && finalImageUrl.isNotEmpty && !finalImageUrl.startsWith('http')) {
+      try {
+        final File imageFile = File(finalImageUrl);
+        if (await imageFile.exists()) {
+          final fileName = '${DateTime.now().millisecondsSinceEpoch}_${imageFile.uri.pathSegments.last}';
+          final storageRef = FirebaseStorage.instance.ref().child('users/$userId/gifticons/$fileName');
+          
+          await storageRef.putFile(imageFile);
+          finalImageUrl = await storageRef.getDownloadURL();
+        }
+      } catch (e) {
+        print('이미지 업로드 실패: $e');
+        // 업로드 실패 시 원래 로컬 경로 유지
+      }
+    }
+
     final gifticonToSave = gifticon.copyWith(
       userId: userId,
+      imageUrl: finalImageUrl,
     );
     
     final data = gifticonToSave.toFirestore();
@@ -68,6 +87,24 @@ class GifticonRepository {
   Future<void> deleteGifticon(String id) async {
     final collection = _userCollection;
     if (collection == null) return;
+
+    // Firestore에서 문서 가져오기
+    final doc = await collection.doc(id).get();
+    if (doc.exists) {
+      final data = doc.data() as Map<String, dynamic>?;
+      final imageUrl = data?['imageUrl'] as String?;
+      
+      // Storage에 저장된 이미지라면 삭제
+      if (imageUrl != null && imageUrl.startsWith('https://firebasestorage.googleapis.com')) {
+        try {
+          final storageRef = FirebaseStorage.instance.refFromURL(imageUrl);
+          await storageRef.delete();
+        } catch (e) {
+          print('Storage 이미지 삭제 실패: $e');
+        }
+      }
+    }
+
     await collection.doc(id).delete();
   }
 
