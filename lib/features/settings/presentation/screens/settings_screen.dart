@@ -35,8 +35,6 @@ class SettingsScreen extends ConsumerWidget {
               children: [
                 _buildSecurityToggleSection(context, ref, isSecurityOn),
                 Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
-                _buildGeofenceToggleSection(context, ref, settings.isGeofenceEnabled),
-                Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
                 _buildGeofenceRadiusSection(context, ref, settings.geofenceRadius, settings.isGeofenceEnabled),
                 Divider(height: 8, thickness: 8, color: Colors.grey.shade100),
                 _buildToggleSection(context, ref, settings.isEnabled),
@@ -94,38 +92,6 @@ class SettingsScreen extends ConsumerWidget {
                 ref.read(securityToggleProvider.notifier).toggle(value);
               }
             },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildGeofenceToggleSection(BuildContext context, WidgetRef ref, bool isGeofenceEnabled) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  '매장 주변 알림',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
-                ),
-                SizedBox(height: 4),
-                Text(
-                  '주변 매장 접근 시 알림을 보냅니다. (비활성화 시 배터리 절약)',
-                  style: TextStyle(fontSize: 13, color: Colors.grey),
-                ),
-              ],
-            ),
-          ),
-          Switch.adaptive(
-            value: isGeofenceEnabled,
-            activeColor: AppTheme.primaryTeal,
-            onChanged: (value) => ref.read(settingsControllerProvider.notifier).toggleGeofenceEnabled(value),
           ),
         ],
       ),
