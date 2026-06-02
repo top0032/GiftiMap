@@ -34,6 +34,10 @@ class SettingsScreen extends ConsumerWidget {
             child: Column(
               children: [
                 _buildSecurityToggleSection(context, ref, isSecurityOn),
+                Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
+                _buildGeofenceToggleSection(context, ref, settings.isGeofenceEnabled),
+                Divider(height: 1, color: Colors.grey.shade200, indent: 16, endIndent: 16),
+                _buildGeofenceRadiusSection(context, ref, settings.geofenceRadius, settings.isGeofenceEnabled),
                 Divider(height: 8, thickness: 8, color: Colors.grey.shade100),
                 _buildToggleSection(context, ref, settings.isEnabled),
                 if (settings.isEnabled) ...[
@@ -54,19 +58,21 @@ class SettingsScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '보안 인증',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '기프티콘 확인 시 지문/패턴 인증을 사용합니다.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-            ],
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '보안 인증',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '기프티콘 확인 시 지문/패턴 인증을 사용합니다.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ],
+            ),
           ),
           Switch.adaptive(
             value: isSecurityOn,
@@ -94,7 +100,108 @@ class SettingsScreen extends ConsumerWidget {
     );
   }
 
+  Widget _buildGeofenceToggleSection(BuildContext context, WidgetRef ref, bool isGeofenceEnabled) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '매장 주변 알림',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '주변 매장 접근 시 알림을 보냅니다. (비활성화 시 배터리 절약)',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: isGeofenceEnabled,
+            activeColor: AppTheme.primaryTeal,
+            onChanged: (value) => ref.read(settingsControllerProvider.notifier).toggleGeofenceEnabled(value),
+          ),
+        ],
+      ),
+    );
+  }
 
+  Widget _buildGeofenceRadiusSection(BuildContext context, WidgetRef ref, double radius, bool isGeofenceEnabled) {
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 200),
+      opacity: isGeofenceEnabled ? 1.0 : 0.4,
+      child: IgnorePointer(
+        ignoring: !isGeofenceEnabled,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    '매장 주변 알림 거리',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
+                  ),
+                  Text(
+                    '${radius.toInt()}m',
+                    style: TextStyle(
+                      fontSize: 16, 
+                      fontWeight: FontWeight.bold, 
+                      color: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 4),
+              const Text(
+                '설정한 거리 안에 매장이 있으면 알림을 보냅니다.',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              SliderTheme(
+                data: SliderTheme.of(context).copyWith(
+                  activeTrackColor: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey.shade300,
+                  inactiveTrackColor: isGeofenceEnabled ? AppTheme.primaryTeal.withOpacity(0.1) : Colors.grey.shade100,
+                  thumbColor: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey,
+                  overlayColor: isGeofenceEnabled ? AppTheme.primaryTeal.withOpacity(0.2) : Colors.transparent,
+                  valueIndicatorColor: isGeofenceEnabled ? AppTheme.primaryTeal : Colors.grey,
+                  valueIndicatorTextStyle: const TextStyle(color: Colors.white),
+                ),
+                child: Slider(
+                  value: radius,
+                  min: 100,
+                  max: 300,
+                  divisions: 4, // 100, 150, 200, 250, 300
+                  label: '${radius.toInt()}m',
+                  onChanged: (value) {
+                    ref.read(settingsControllerProvider.notifier).updateGeofenceRadius(value);
+                  },
+                ),
+              ),
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('100m', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                    Text('300m', style: TextStyle(fontSize: 11, color: Colors.grey)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
   Widget _buildToggleSection(BuildContext context, WidgetRef ref, bool isEnabled) {
     return Container(
@@ -102,19 +209,21 @@ class SettingsScreen extends ConsumerWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                '기프티콘 만료 알림',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
-              ),
-              SizedBox(height: 4),
-              Text(
-                '유효기간이 임박하면 알림을 보냅니다.',
-                style: TextStyle(fontSize: 13, color: Colors.grey),
-              ),
-            ],
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '기프티콘 만료 알림',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppTheme.secondaryNavy),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  '유효기간이 임박하면 알림을 보냅니다.',
+                  style: TextStyle(fontSize: 13, color: Colors.grey),
+                ),
+              ],
+            ),
           ),
           Switch.adaptive(
             value: isEnabled,
@@ -165,7 +274,16 @@ class SettingsScreen extends ConsumerWidget {
             separatorBuilder: (context, index) => Divider(height: 1, color: Colors.grey.shade100, indent: 16, endIndent: 16),
             itemBuilder: (context, index) {
               final alert = alerts[index];
-              final dayLabel = alert.daysBefore == 0 ? '당일' : '${alert.daysBefore}일 전';
+              String dayLabel;
+              if (alert.daysBefore == 0) {
+                dayLabel = '당일';
+              } else if (alert.daysBefore == 7) {
+                dayLabel = '1주 전';
+              } else if (alert.daysBefore == 30) {
+                dayLabel = '1달 전';
+              } else {
+                dayLabel = '${alert.daysBefore}일 전';
+              }
               final timeLabel = '${alert.hour >= 12 ? '오후' : '오전'} ${(alert.hour % 12 == 0 ? 12 : alert.hour % 12).toString().padLeft(2, '0')}:${alert.minute.toString().padLeft(2, '0')}';
               
               return ListTile(
@@ -192,27 +310,118 @@ class SettingsScreen extends ConsumerWidget {
   }
 
   Future<void> _addUnifiedAlert(BuildContext context, WidgetRef ref, List<AlertConfig> currentAlerts) async {
-    final DateTime now = DateTime.now();
-    final DateTime? pickedDate = await showDatePicker(
+    int? daysBefore = await showModalBottomSheet<int>(
       context: context,
-      initialDate: now,
-      firstDate: now,
-      lastDate: now.add(const Duration(days: 365)),
-      helpText: '알림을 받을 날짜 선택',
-      cancelText: '취소',
-      confirmText: '다음 (시간 선택)',
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (BuildContext context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text(
+                  '알림 시기 선택',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppTheme.secondaryNavy,
+                  ),
+                ),
+              ),
+              ListTile(
+                leading: const Icon(Icons.today_rounded, color: AppTheme.primaryTeal),
+                title: const Text('당일'),
+                onTap: () => Navigator.pop(context, 0),
+              ),
+              ListTile(
+                leading: const Icon(Icons.event_rounded, color: AppTheme.primaryTeal),
+                title: const Text('1일 전'),
+                onTap: () => Navigator.pop(context, 1),
+              ),
+              ListTile(
+                leading: const Icon(Icons.date_range_rounded, color: AppTheme.primaryTeal),
+                title: const Text('1주 전'),
+                onTap: () => Navigator.pop(context, 7),
+              ),
+              ListTile(
+                leading: const Icon(Icons.calendar_month_rounded, color: AppTheme.primaryTeal),
+                title: const Text('1달 전'),
+                onTap: () => Navigator.pop(context, 30),
+              ),
+              ListTile(
+                leading: const Icon(Icons.edit_rounded, color: AppTheme.primaryTeal),
+                title: const Text('직접 입력'),
+                onTap: () => Navigator.pop(context, -1),
+              ),
+            ],
+          ),
+        );
+      },
     );
 
-    if (pickedDate == null) return;
-
-    final daysBefore = pickedDate.difference(DateTime(now.year, now.month, now.day)).inDays;
+    if (daysBefore == null) return;
 
     if (!context.mounted) return;
+
+    if (daysBefore == -1) {
+      final int? customDays = await showDialog<int>(
+        context: context,
+        builder: (context) {
+          final TextEditingController controller = TextEditingController();
+          return AlertDialog(
+            title: const Text('알림 시기 직접 입력', style: TextStyle(fontWeight: FontWeight.bold)),
+            content: TextField(
+              controller: controller,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                hintText: '예: 3',
+                suffixText: '일 전',
+              ),
+              autofocus: true,
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('취소', style: TextStyle(color: Colors.grey)),
+              ),
+              TextButton(
+                onPressed: () {
+                  final int? value = int.tryParse(controller.text);
+                  if (value != null && value >= 0) {
+                    Navigator.pop(context, value);
+                  }
+                },
+                child: const Text('확인', style: TextStyle(color: AppTheme.primaryTeal)),
+              ),
+            ],
+          );
+        },
+      );
+
+      if (customDays == null) return;
+      daysBefore = customDays;
+    }
+
+    if (!context.mounted) return;
+
+    String dayLabelText;
+    if (daysBefore == 0) {
+      dayLabelText = '당일';
+    } else if (daysBefore == 7) {
+      dayLabelText = '1주 전';
+    } else if (daysBefore == 30) {
+      dayLabelText = '1달 전';
+    } else {
+      dayLabelText = '${daysBefore}일 전';
+    }
 
     final TimeOfDay? pickedTime = await showTimePicker(
       context: context,
       initialTime: const TimeOfDay(hour: 9, minute: 0),
-      helpText: '${daysBefore == 0 ? '당일' : '$daysBefore일 전'} 알림 시간 설정',
+      helpText: '$dayLabelText 알림 시간 설정',
       cancelText: '취소',
       confirmText: '완료',
       hourLabelText: '시',
