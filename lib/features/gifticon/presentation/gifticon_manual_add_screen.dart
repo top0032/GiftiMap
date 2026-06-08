@@ -24,7 +24,6 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
   final _brandController = TextEditingController();
   final _productController = TextEditingController();
   final _expirationController = TextEditingController();
-  final _barcodeController = TextEditingController();
   File? _selectedImage;
   bool _isProcessingOcr = false;
   bool _isSaving = false;
@@ -34,7 +33,6 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
     _brandController.dispose();
     _productController.dispose();
     _expirationController.dispose();
-    _barcodeController.dispose();
     super.dispose();
   }
 
@@ -75,7 +73,6 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
           if (parsedData['brandName'] != null) _brandController.text = parsedData['brandName']!;
           if (parsedData['productName'] != null) _productController.text = parsedData['productName']!;
           if (parsedData['expirationDate'] != null) _expirationController.text = parsedData['expirationDate']!;
-          if (parsedData['barcodeNumber'] != null) _barcodeController.text = parsedData['barcodeNumber']!;
           _isProcessingOcr = false;
         });
 
@@ -106,7 +103,7 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
           brandName: _brandController.text,
           productName: _productController.text,
           expirationDate: _expirationController.text,
-          barcodeNumber: _barcodeController.text.isEmpty ? '미등록' : _barcodeController.text,
+          barcodeNumber: '미등록',
           createdAt: DateTime.now(),
           imageUrl: _selectedImage?.path,
         );
@@ -330,14 +327,6 @@ class _GifticonManualAddScreenState extends ConsumerState<GifticonManualAddScree
                   readOnly: true,
                   onTap: () => _selectDate(context),
                   validator: (value) => value == null || value.trim().isEmpty ? '만료기간을 입력해주세요.' : null,
-                ),
-                
-                _buildTextField(
-                  label: '바코드 번호 (선택)',
-                  hint: '하단 숫자 입력 (텍스트로 확인용)',
-                  controller: _barcodeController,
-                  icon: Icons.qr_code_rounded,
-                  keyboardType: TextInputType.number,
                 ),
                 
                 const SizedBox(height: 24),

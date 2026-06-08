@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'dart:io';
-import 'package:barcode_widget/barcode_widget.dart';
 import 'package:screen_brightness/screen_brightness.dart';
 import 'package:go_router/go_router.dart';
 import '../domain/models/gifticon_model.dart';
@@ -352,45 +351,6 @@ class _GifticonDetailScreenState extends ConsumerState<GifticonDetailScreen> {
                     }
                   ),
                 ],
-              ),
-              const SizedBox(height: 50),
-              // 바코드 영역 (실제 바코드 이미지)
-              Container(
-                padding: const EdgeInsets.all(24),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(20),
-                  boxShadow: [
-                    BoxShadow(
-                      color: AppTheme.secondaryNavy.withOpacity(0.08),
-                      blurRadius: 20,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(minHeight: 120),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      BarcodeWidget(
-                        barcode: Barcode.code128(),
-                        data: currentGifticon.barcodeNumber.replaceAll(RegExp(r'[^0-9a-zA-Z]'), ''),
-                        width: double.infinity,
-                        height: 80,
-                        errorBuilder: (context, error) => const Center(
-                          child: Text('바코드를 생성할 수 없습니다.\n올바른 번호인지 확인해주세요.', textAlign: TextAlign.center, style: TextStyle(color: Colors.red, fontSize: 12)),
-                        ),
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.bold,
-                          letterSpacing: 2,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
               ),
               const SizedBox(height: 40),
               // 결제 완료/사용 완료 처리 버튼
